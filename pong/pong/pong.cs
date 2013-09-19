@@ -10,6 +10,8 @@ public class pong : PhysicsGame
         AloitaPeli();
 
         Keyboard.Listen(Key.Escape, ButtonState.Pressed, ConfirmExit, "Lopeta peli");
+
+        // Muutos
     }
 
     void LuoKentta()
