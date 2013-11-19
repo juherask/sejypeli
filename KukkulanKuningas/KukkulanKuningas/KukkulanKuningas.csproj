@@ -110,6 +110,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Inventory.cs" />
     <Compile Include="Ohjelma.cs" />
     <Compile Include="KukkulanKuningas.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
