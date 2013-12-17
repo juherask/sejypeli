@@ -1,0 +1,24 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual C# Express 2010
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CatWithOnly1Life", "CatWithOnly1Life\CatWithOnly1Life\CatWithOnly1Life.csproj", "{19DDC589-159B-4121-B78F-D7D8C6D98494}"
+EndProject
+Project("{96E2B04D-8817-42C6-938A-82C39BA4D311}") = "CatWithOnly1LifeContent", "CatWithOnly1Life\CatWithOnly1LifeContent\CatWithOnly1LifeContent.contentproj", "{63C950FC-2209-4F69-860A-17453B0AB8A3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x86 = Debug|x86
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{19DDC589-159B-4121-B78F-D7D8C6D98494}.Debug|x86.ActiveCfg = Debug|x86
+		{19DDC589-159B-4121-B78F-D7D8C6D98494}.Debug|x86.Build.0 = Debug|x86
+		{19DDC589-159B-4121-B78F-D7D8C6D98494}.Release|x86.ActiveCfg = Release|x86
+		{19DDC589-159B-4121-B78F-D7D8C6D98494}.Release|x86.Build.0 = Release|x86
+		{63C950FC-2209-4F69-860A-17453B0AB8A3}.Debug|x86.ActiveCfg = Debug|x86
+		{63C950FC-2209-4F69-860A-17453B0AB8A3}.Release|x86.ActiveCfg = Release|x86
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
