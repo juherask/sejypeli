@@ -113,7 +113,7 @@
     <Compile Include="Harjoitukset.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Ohjelma.cs" />
-    <Compile Include="Tarkastaja.cs" />
+    <Compile Include="Framework\Tarkastaja.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Game.ico" />
