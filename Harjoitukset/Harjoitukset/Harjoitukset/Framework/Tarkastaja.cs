@@ -8,10 +8,38 @@ using Jypeli.Widgets;
 
 public abstract class Tarkistaja : PhysicsGame
 {
+    int PACPADDING = 60;
+    int PACSPEED = 333;
+    int TEHTAVIA = 10;
     int tehtava = 1;
+    GameObject pacman;
+    List<GameObject> coins;
 
     public override void Begin()
     {
+        Animation pacanim = new Animation( LoadImages("pac1","pac2") );
+        pacman = new GameObject(pacanim);
+        pacman.X = Screen.Left + PACPADDING;
+        pacman.Y = Screen.Bottom + PACPADDING;
+        Add(pacman, 2);
+        pacman.Animation.FPS = 3;
+        pacman.Animation.Start();
+
+        coins = new List<GameObject>();
+        double coiny = pacman.Y;
+        double coinx = pacman.X;
+        for (int i = 0; i < TEHTAVIA; i++)
+        {
+            coinx += (Screen.Right - PACPADDING - pacman.X) / TEHTAVIA;
+
+            GameObject coin = new GameObject(40,40);
+            coin.Image = LoadImage("coin");
+            coin.X = coinx;
+            coin.Y = coiny;
+            coins.Add(coin);
+            Add(coin, 1);
+        }
+
         Timer.SingleShot(0.33, TarkistaTehtava);
 
         PhoneBackButton.Listen(ConfirmExit, "Lopeta peli");
@@ -51,41 +79,57 @@ public abstract class Tarkistaja : PhysicsGame
                 }
                 break;
             case 3:
-                //TODO: Aki/Jussi tarkista
+                //TODO: Aki/Jussi kirjoita tarkistakoodi
+                oikein = true;
                 break;
             case 4:
-                //TODO: Aki/Jussi tarkista
+                //TODO: Aki/Jussi kirjoita tarkistakoodi
+                oikein = false;
                 break;
             case 5:
-                //TODO: Aki/Jussi tarkista
+                //TODO: Aki/Jussi kirjoita tarkistakoodi
+                oikein = false;
                 break;
             case 6:
-                //TODO: Aki/Jussi tarkista
+                //TODO: Aki/Jussi kirjoita tarkistakoodi
+                oikein = false;
                 break;
             case 7:
-                //TODO: Aki/Jussi tarkista
+                //TODO: Aki/Jussi kirjoita tarkistakoodi
+                oikein = false;
                 break;
             case 8:
-                //TODO: Aki/Jussi tarkista
+                //TODO: Aki/Jussi kirjoita tarkistakoodi
+                oikein = false;
                 break;
             case 9:
-                //TODO: Aki/Jussi tarkista
+                //TODO: Aki/Jussi kirjoita tarkistakoodi
+                oikein = false;
                 break;
             case 10:
-                //TODO: Aki/Jussi tarkista
+                //TODO: Aki/Jussi kirjoita tarkistakoodi
+                oikein = false;
                 break;
             default:
-                //TODO: Aki/Jussi tarkista
                 oikein = false;
                 break;
         }
 
+        double seuraavaanTarkastukseen = 0.33;
         if (oikein)
         {
+            if (tehtava > 1)
+                coins[tehtava-2].Destroy();
+            Vector coinPos = coins[tehtava-1].Position;
+            coinPos.X+=20;
+            pacman.MoveTo(coinPos, PACSPEED);
             tehtava++;
+
+            // Prevent removing coin before check
+            seuraavaanTarkastukseen = Math.Abs(pacman.X - coinPos.X) / PACSPEED;
         }
         // Try as long as it takes.
-        Timer.SingleShot(0.33, TarkistaTehtava);
+        Timer.SingleShot(seuraavaanTarkastukseen, TarkistaTehtava);
     }
 
 
