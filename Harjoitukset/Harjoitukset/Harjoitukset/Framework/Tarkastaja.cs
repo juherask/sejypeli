@@ -5,9 +5,18 @@ using Jypeli.Assets;
 using Jypeli.Controls;
 using Jypeli.Effects;
 using Jypeli.Widgets;
+using System.Linq;
 
 public abstract class Tarkistaja : PhysicsGame
 {
+    enum TehtavanTila
+    {
+        EiToteutettu,
+        ToteutettuSaattaaToimia,
+        ToteutettuEiToimi,
+        ToteutettuToimii,
+    }
+
     int PACPADDING = 60;
     int PACSPEED = 333;
     int TEHTAVIA = 10;
@@ -16,8 +25,13 @@ public abstract class Tarkistaja : PhysicsGame
     GameObject haamut;
     List<GameObject> kolikot;
 
+    // Tehtävien tilatiedot
+    List<GameObject> objektitEnnenTehtavaa3 = null;
+
     public override void Begin()
     {
+        SetWindowSize(1280, 720);
+
         Animation pacanim = new Animation( LoadImages("pac1","pac2") );
         pacman = new GameObject(pacanim);
         pacman.X = Screen.Left + PACPADDING;
@@ -48,141 +62,202 @@ public abstract class Tarkistaja : PhysicsGame
             kolikot.Add(kolikko);
             Add(kolikko, 1);
         }
-
+        
         Timer.SingleShot(0.33, TarkistaTehtava);
 
         PhoneBackButton.Listen(ConfirmExit, "Lopeta peli");
         Keyboard.Listen(Key.Escape, ButtonState.Pressed, ConfirmExit, "Lopeta peli");
     }
 
+    private double PoistaKolikko()
+    {
+        double seuraavaanTarkastukseen = 1.00;
+        if (tehtava > 0)
+        {
+            if (tehtava > 1)
+                kolikot[tehtava - 2].Destroy();
+            Vector coinPos = kolikot[tehtava - 1].Position;
+            coinPos.X += 20;
+            pacman.MoveTo(coinPos, PACSPEED);
+
+            // Prevent removing coin before check
+            seuraavaanTarkastukseen = Math.Abs(pacman.X - coinPos.X) / PACSPEED;
+        }
+        return seuraavaanTarkastukseen;
+    }
+
     private void TarkistaTehtava()
     {
-        bool toteutettu = false;
-        bool oikein = true;
+        TehtavanTila tulos = TehtavanTila.EiToteutettu;
 
         switch (tehtava)
         {
             case 1:
-                try
-                {
-                    for (int i = 0; i < 100; i++)
-                    {
-                        int a = RandomGen.NextInt(10);
-                        int b = RandomGen.NextInt(10);
-                        if ( a+b != Tehtava1(a,b ) )
-                        {
-                            string virhe = String.Format( "Virhe: Koodi ei laske oikein lukuja yhteen. Esim. {0}+{1}={2}, kun pitäisi olla {3}", a,b,Tehtava1(a,b ),a+b );
-                            MessageDisplay.Add(virhe );
-                            oikein = false;
-                            break;
-                        }
-                    }
-                    toteutettu = true;
-                }
-                catch (NotImplementedException)
-                {
-                    toteutettu = false;
-                }
+                tulos = TarkistaTehtava1();
                 break;
             case 2:
-                try
-                {
-                    double TOLERANCE = 0.01;
-                    for (int i = 0; i < 100; i++)
-                    {
-                        double x = RandomGen.NextDouble(-10.0, 10.0);
-                        double y = RandomGen.NextDouble(-10.0, 10.0);
-                        double z = RandomGen.NextDouble(-10.0, 10.0);
-                        double ka = (x + y + z) / 3;
-                        if ( Math.Abs(ka - Tehtava2(x,y,z)) > TOLERANCE )
-                        {
-                            string virhe = String.Format(@"Virhe: Koodi ei laske oikein keskiarvoa. Esim. koodi antaa
-{0}, {1}, {2} keskiarvoksi {3} kun sen pitäisi olla {4}", x, y, z, Tehtava2(x, y, z), (x+y+z/3));
-                            MessageDisplay.Add(virhe);
-
-                            oikein = false;
-                            break;
-                        }
-                    }
-                    toteutettu = true;
-                }
-                catch (NotImplementedException)
-                {
-                    toteutettu = false;
-                }
+                tulos = TarkistaTehtava2();
                 break;
             case 3:
-                //TODO: Aki/Jussi kirjoita tarkistakoodi
-                toteutettu = true;
-                oikein = false;
+                tulos = TarkistaTehtava3();
                 break;
             case 4:
                 //TODO: Aki/Jussi kirjoita tarkistakoodi
-                oikein = false;
                 break;
             case 5:
                 //TODO: Aki/Jussi kirjoita tarkistakoodi
-                oikein = false;
                 break;
             case 6:
                 //TODO: Aki/Jussi kirjoita tarkistakoodi
-                oikein = false;
                 break;
             case 7:
                 //TODO: Aki/Jussi kirjoita tarkistakoodi
-                oikein = false;
                 break;
             case 8:
                 //TODO: Aki/Jussi kirjoita tarkistakoodi
-                oikein = false;
                 break;
             case 9:
                 //TODO: Aki/Jussi kirjoita tarkistakoodi
-                oikein = false;
                 break;
             case 10:
                 //TODO: Aki/Jussi kirjoita tarkistakoodi
-                oikein = false;
                 break;
             default:
-                oikein = true;
-                toteutettu = true;
+                tulos = TehtavanTila.ToteutettuToimii;
                 break;
         }
 
-        
-        if (toteutettu)
+        // Toimi tuloksen mukaisesti
+        if (tulos == TehtavanTila.ToteutettuToimii)
         {
-            double seuraavaanTarkastukseen = 1.00;
-            if (oikein)
+            double seuraavaanTarkastukseen = PoistaKolikko();
+            tehtava++;
+
+            // Try as long as it takes.
+            Timer.SingleShot(seuraavaanTarkastukseen, TarkistaTehtava);
+        }
+        else if (tulos == TehtavanTila.ToteutettuEiToimi)
+        {
+            PoistaKolikko();
+            Vector ulosVasemmalta = new Vector(Screen.Left-haamut.Width/2, pacman.Y);
+            Animation peruutusAnimaatio = Animation.Mirror(new Animation(LoadImages("pac1", "pac2")));
+            pacman.Animation = peruutusAnimaatio;
+            pacman.Animation.FPS = 5;
+            pacman.Animation.Start();
+            pacman.MoveTo(ulosVasemmalta, PACSPEED);
+            haamut.MoveTo(ulosVasemmalta, PACSPEED);
+        }
+        else if (tulos == TehtavanTila.ToteutettuSaattaaToimia)
+        {
+            Timer.SingleShot(0.01, TarkistaTehtava);
+        }
+        
+    }
+
+    private TehtavanTila TarkistaTehtava3()
+    {
+        TehtavanTila tila = TehtavanTila.EiToteutettu;
+        try
+        {
+            if (objektitEnnenTehtavaa3 == null)
             {
-                if (tehtava > 0)
-                {
-                    if (tehtava > 1)
-                        kolikot[tehtava - 2].Destroy();
-                    Vector coinPos = kolikot[tehtava - 1].Position;
-                    coinPos.X += 20;
-                    pacman.MoveTo(coinPos, PACSPEED);
-
-                    // Prevent removing coin before check
-                    seuraavaanTarkastukseen = Math.Abs(pacman.X - coinPos.X) / PACSPEED;
-                }
-                tehtava++;
-
-                // Try as long as it takes.
-                Timer.SingleShot(seuraavaanTarkastukseen, TarkistaTehtava);
+                // Precondition
+                objektitEnnenTehtavaa3 = GetObjects(go => go is PhysicsObject);
+                Tehtava3();
+                // Tehtavan kutsumisen jälkeen pitää antaa JyPelille aikaa tehdä työnsä.
+                //  tähän tarkistajaan tullaan siis myöhemmin uudelleen, mutta tätä haaraa ei enää tehdä.
+                tila = TehtavanTila.ToteutettuSaattaaToimia;
+                return tila;
             }
-            else // väärin
+
+            List<GameObject> uudet = GetObjects(go => go is PhysicsObject && !objektitEnnenTehtavaa3.Contains(go));
+
+            tila = TehtavanTila.ToteutettuEiToimi;
+            if (uudet.Count == 0)
             {
-                Vector ulosVasemmalta = new Vector(Screen.Left-haamut.Width/2, pacman.Y);
-                Animation peruutusAnimaatio = Animation.Mirror(new Animation(LoadImages("pac1", "pac2")));
-                pacman.Animation = peruutusAnimaatio;
-                pacman.Animation.FPS = 5;
-                pacman.Animation.Start();
-                pacman.MoveTo(ulosVasemmalta, PACSPEED);
-                haamut.MoveTo(ulosVasemmalta, PACSPEED);
+                MessageDisplay.Add("Palloa edustavaa pelioliota ei ole lisätty");
+            }
+            else if (uudet.Count > 1)
+            {
+                MessageDisplay.Add("Liian monta uutta pelioliota lisätty");
+            }
+            else if (uudet[0].Shape != Shape.Circle)
+            {
+                MessageDisplay.Add("Lisäämäsi pallo ei ole pyöreä");
+            }
+            else if (uudet[0].Color != Color.White)
+            {
+                MessageDisplay.Add("Olet vaihtanut pallon väriä. Kiva, mutta lisäämäsi pallon tulisi olla valkoinen");
+            }
+            else
+            {
+                tila = TehtavanTila.ToteutettuToimii;
             }
         }
+        catch (NotImplementedException)
+        {
+            tila = TehtavanTila.EiToteutettu;
+        }
+        return tila;
+    }
+
+    private TehtavanTila TarkistaTehtava2()
+    {
+        TehtavanTila tila = TehtavanTila.EiToteutettu;
+        try
+        {
+            tila = TehtavanTila.ToteutettuToimii;
+
+            double TOLERANCE = 0.01;
+            for (int i = 0; i < 100; i++)
+            {
+                double x = RandomGen.NextDouble(-10.0, 10.0);
+                double y = RandomGen.NextDouble(-10.0, 10.0);
+                double z = RandomGen.NextDouble(-10.0, 10.0);
+                double ka = (x + y + z) / 3;
+                if (Math.Abs(ka - Tehtava2(x, y, z)) > TOLERANCE)
+                {
+                    string virhe = String.Format(@"Virhe: Koodi ei laske oikein keskiarvoa. Esim. koodi antaa
+{0}, {1}, {2} keskiarvoksi {3} kun sen pitäisi olla {4}", x, y, z, Tehtava2(x, y, z), (x + y + z / 3));
+                    MessageDisplay.Add(virhe);
+
+                    tila = TehtavanTila.ToteutettuEiToimi;
+                    break;
+                }
+            }
+        }
+        catch (NotImplementedException)
+        {
+            tila = TehtavanTila.EiToteutettu;
+        }
+        return tila;
+    }
+
+    private TehtavanTila TarkistaTehtava1()
+    {
+        TehtavanTila tila = TehtavanTila.EiToteutettu;
+        try
+        {
+            tila = TehtavanTila.ToteutettuToimii;
+
+            for (int i = 0; i < 100; i++)
+            {
+                int a = RandomGen.NextInt(10);
+                int b = RandomGen.NextInt(10);
+                if (a + b != Tehtava1(a, b))
+                {
+                    string virhe = String.Format("Virhe: Koodi ei laske oikein lukuja yhteen. Esim. {0}+{1}={2}, kun pitäisi olla {3}", a, b, Tehtava1(a, b), a + b);
+                    MessageDisplay.Add(virhe);
+                    tila = TehtavanTila.ToteutettuEiToimi;
+                    break;
+                }   
+            }
+        }
+        catch (NotImplementedException)
+        {
+            tila = TehtavanTila.EiToteutettu;
+        }
+        return tila;
     }
 
 
