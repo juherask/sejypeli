@@ -24,10 +24,37 @@ public class IhmisetVsHirviot : Game
         CreateMeterFactories(PlayerTeam.Humans);
         CreateMeterFactories(PlayerTeam.Monsters);
 
+        Mouse.IsCursorVisible = true;
+
         // FOR TESTING ONLY REMOVE THESE 
         Timer.SingleShot(RandomGen.NextDouble(0.1, 4.0), () => ResourceAdded( PlayerTeam.Humans ) );
         Timer.SingleShot(RandomGen.NextDouble(0.1, 4.0), () => ResourceAdded( PlayerTeam.Monsters ) );
     }
+
+    void AddButtons(PlayerTeam team, Vector deployPoint, int degree)
+    {
+        double baseAngle = team==PlayerTeam.Humans ? 205 : 270;
+
+        double startDeg = baseAngle + 45.0 / degree;
+        double degStep = (180 - (45.0 / degree) * 2) / degree;
+        for (int i = 0; i < degree; i++)
+        {
+            GameObject deployButton = new GameObject(40, 40, Shape.Triangle);
+            deployButton.Angle = Angle.FromDegrees(startDeg + degStep * i - 90 );
+            deployButton.Position = deployPoint + Vector.FromLengthAndAngle(75, Angle.FromDegrees(startDeg + degStep * i));
+            Add(deployButton);
+
+            Mouse.ListenOn(deployButton, MouseButton.Left, ButtonState.Released, () => Deploy(team, i), "Click do deploy unit");
+
+            GameObject deployShadow = new GameObject(40, 40, Shape.Triangle);
+            deployShadow.Angle = Angle.FromDegrees(startDeg + degStep * i - 90 );
+            deployShadow.Position = deployPoint + Vector.FromLengthAndAngle(75, Angle.FromDegrees(startDeg + degStep * i)) +
+                new Vector(0, -10);
+            deployShadow.Color = Color.Gray;
+            Add(deployShadow, -1); 
+        }
+    }
+
 
     void CreateMeterFactories(PlayerTeam team)
     {
@@ -79,6 +106,18 @@ public class IhmisetVsHirviot : Game
                 gatherPoint
                 ));
         }
+
+        switch (team)
+        {
+            case PlayerTeam.Humans:
+                AddButtons(team, gatherPoint, 3);
+                break;
+            case PlayerTeam.Monsters:
+                AddButtons(team, gatherPoint, 3);
+                break;
+        }
+
+        
     }
 
     void CreateNewUnit(PlayerTeam team, UnitType type, Vector spawnPoint, Vector gatherPoint)
@@ -91,7 +130,7 @@ public class IhmisetVsHirviot : Game
         unit.MoveTo(moveToPos, MOVE_TO_QUEUE_SPEED);
 
         if (teams[team].DeployQueue.Count==0)
-            Timer.SingleShot( moveToPos.Magnitude / MOVE_TO_QUEUE_SPEED, CanDeploy(team) );
+            Timer.SingleShot( moveToPos.Magnitude / MOVE_TO_QUEUE_SPEED, () => CanDeploy(team) );
 
         teams[team].DeployQueue.AddLast(unit);
 
@@ -105,7 +144,7 @@ public class IhmisetVsHirviot : Game
 
     }
 
-    void Deploy(PlayerTeam team)
+    void Deploy(PlayerTeam team, int pathIndex)
     {
     }
 
