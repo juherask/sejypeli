@@ -91,7 +91,7 @@ public class IhmisetVsHirviot : Game
         unit.MoveTo(moveToPos, MOVE_TO_QUEUE_SPEED);
 
         if (teams[team].DeployQueue.Count==0)
-            Timer.SingleShot( moveToPos.Magnitude / MOVE_TO_QUEUE_SPEED, CanDeploy(team) );
+            Timer.SingleShot( moveToPos.Magnitude / MOVE_TO_QUEUE_SPEED, () => CanDeploy(team) );
 
         teams[team].DeployQueue.AddLast(unit);
 
@@ -102,7 +102,7 @@ public class IhmisetVsHirviot : Game
 
     void CanDeploy(PlayerTeam team)
     {
-
+        //if (teams[team].DeployQueue.Count > 0)
     }
 
     void Deploy(PlayerTeam team)
