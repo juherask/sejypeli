@@ -21,7 +21,8 @@ enum UnitType
 
 class PlayerData
 {
-    public Dictionary<UnitType, DoubleMeter> UnitCreationTargets = new Dictionary<UnitType, DoubleMeter>();
+    public Dictionary<UnitType, DoubleMeter> UnitCreationAllocation = new Dictionary<UnitType, DoubleMeter>();
     public Dictionary<UnitType, DoubleMeter> UnitCreationProgress = new Dictionary<UnitType, DoubleMeter>();
     public LinkedList<GameObject> DeployQueue = new LinkedList<GameObject>();
+    public Dictionary<int, GameObject> DeployButtons = new Dictionary<int, GameObject>();
 }

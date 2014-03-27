@@ -13,12 +13,14 @@ public class RattleAndHum : PhysicsGame
 
     double SKAALAUS = 0.20;
     SoundEffect pallonAani;
+    SoundEffect tormaysAani;
+    double SAMPLENPITUUS_KERROIN = 3.0;
     double pallonNopeus = 0.1;
     double pallonSijaintiX = 0.0;
     double pallonSijaintiY = 0.0;
 
     double alkuNopeus = 0.0;
-    bool demo = true;
+    bool demo = false;
 
     GameObject kentta;
     PhysicsObject pallo;
@@ -40,8 +42,10 @@ public class RattleAndHum : PhysicsGame
         pallo = new PhysicsObject(60 * SKAALAUS, 60 * SKAALAUS, Shape.Circle);
         pallo.Color = Color.Red;
         Add(pallo);
+        AddCollisionHandler(pallo, PalloTormaa);
 
-        pallonAani = LoadSoundEffect("rattlewav");
+        pallonAani = LoadSoundEffect("justroll");
+        tormaysAani = LoadSoundEffect("clonkroll");
 
         // Kaksi tilaa, demo, jossa pallo kiertää ympyrää vaihtaen vauhtiaan ja pelitila (toistaiseksi ilman mailoja)
         demoNappi = new PushButton(100, 50, "Demo");
@@ -82,6 +86,10 @@ public class RattleAndHum : PhysicsGame
             oikeaLaita.CollisionIgnoreGroup = 1;
             p1Maali.CollisionIgnoreGroup = 1;
             p2Maali.CollisionIgnoreGroup = 1;
+
+            kentta = new GameObject(1220 * SKAALAUS + 0, 3660 * SKAALAUS + reunanleveys * 2);
+            kentta.IsVisible = false;
+            Add(kentta, -1);
 
             // Laidat ovat kimmoisia
             var kimmoisuus = 0.99;
@@ -126,13 +134,24 @@ public class RattleAndHum : PhysicsGame
         pallo.X = kentta.Left + pallonSijaintiX * kentta.Width;
         pallo.Y = kentta.Top - pallonSijaintiY * kentta.Height;
 
-        var odotus = PalloLiikkuuAani();
+        var odotus = PalloLiikkuuAani(pallonAani);
         Timer.SingleShot(odotus, PalloPyorahtaa);
+    }
+
+    void PalloTormaa(PhysicsObject tormaajaPallo, PhysicsObject kohde)
+    {
+        pallonAani.Stop();
+        tormaysAani.Stop();
+
+        var odotus = PalloLiikkuuAani(tormaysAani);
+        Timer.SingleShot(odotus, PalloLiikkuu);
     }
 
     void PalloLiikkuu()
     {
-        
+        pallonAani.Stop();
+        tormaysAani.Stop();
+
         // laske x, y ja v (nopeus) pelipöydän koordinaatistossa
         pallonSijaintiX = (pallo.X + (1220 * SKAALAUS / 2)) / (1220 * SKAALAUS);
         pallonSijaintiY = 1.0-(pallo.Y + (3660 * SKAALAUS / 2))/ (3660 * SKAALAUS);
@@ -140,11 +159,11 @@ public class RattleAndHum : PhysicsGame
 
         MessageDisplay.Add(String.Format("x:{0:F2}, y:{1:F2}, v:{2:F2}", pallonSijaintiX, pallonSijaintiY, pallonNopeus));
 
-        var odotus = PalloLiikkuuAani();
+        var odotus = PalloLiikkuuAani(pallonAani);
         Timer.SingleShot(odotus, PalloLiikkuu);
     }
 
-    double PalloLiikkuuAani()
+    double PalloLiikkuuAani(SoundEffect aani)
     {
         // tulkkaa x,y ja nopeus äänenvoimakkuudeksi, stereo-efektiksi ja toistonopeudeksi
         double odotus = 0.5 - pallonNopeus / 3.0;
@@ -153,9 +172,8 @@ public class RattleAndHum : PhysicsGame
         double panorointi = pallonSijaintiX*2.0-1.0;
 
         //MessageDisplay.Add(String.Format("pan:{0:F2}, vol:{1:F2}, pitch:{2:F2}, , wait:{3:F2}", panorointi, volume, toistonopeus, odotus));
+        aani.Play(volume, toistonopeus, panorointi);
 
-        pallonAani.Play(volume, toistonopeus, panorointi);
-
-        return odotus;
+        return odotus * SAMPLENPITUUS_KERROIN;
     }
 }
