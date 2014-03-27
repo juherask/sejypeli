@@ -8,6 +8,12 @@ using Jypeli.Widgets;
 
 public class IhmisetVsHirviot : Game
 {
+    // Gameplay constants
+    double amountPerResource = 100.0;
+    double maxGameLenInS = 600.0;
+    double trickleRate = 2.0;
+
+
     double MOVE_TO_QUEUE_SPEED = 50.0;
     Color[] BARCOLORS = new Color[] { Color.Cyan, Color.Lime, Color.Red };
     Dictionary<PlayerTeam, PlayerData> teams = new Dictionary<PlayerTeam, PlayerData>();
@@ -18,6 +24,14 @@ public class IhmisetVsHirviot : Game
     Image logImage = LoadImage("log");
     Image treeImage = LoadImage("tree");
 
+    Image hPreparer = LoadImage("metsuri");
+    Image hRepeller = LoadImage("reportteri");
+    Image hGatherer = LoadImage("moto");
+
+    Image mPreparer = LoadImage("haamu");
+    Image mRepeller = LoadImage("hirvio");
+    Image mGatherer = LoadImage("karhu");
+
     static Vector GatherPoint(PlayerTeam team)
     {
         return new Vector(0, team == PlayerTeam.Humans ? Screen.Top - 135 : Screen.Bottom + 135);
@@ -25,7 +39,7 @@ public class IhmisetVsHirviot : Game
 
     public override void Begin()
     {
-        SetWindowSize(800, 600);
+        SetWindowSize(1024, 768);
         Level.Background.Color = Color.GreenYellow;
 
         PhoneBackButton.Listen(ConfirmExit, "Lopeta peli");
@@ -39,8 +53,8 @@ public class IhmisetVsHirviot : Game
         Mouse.IsCursorVisible = true;
 
         // FOR TESTING ONLY REMOVE THESE 
-        Timer.SingleShot(RandomGen.NextDouble(0.1, 4.0), () => ResourceAdded( PlayerTeam.Humans, 10.0 ) );
-        Timer.SingleShot(RandomGen.NextDouble(0.1, 4.0), () => ResourceAdded(PlayerTeam.Monsters, 10.0));
+        Timer.SingleShot(RandomGen.NextDouble(0.1, 4.0), () => ResourceAdded(PlayerTeam.Humans, amountPerResource));
+        Timer.SingleShot(RandomGen.NextDouble(0.1, 4.0), () => ResourceAdded(PlayerTeam.Monsters, amountPerResource));
     }
 
     void AddPaths()
@@ -200,7 +214,7 @@ public class IhmisetVsHirviot : Game
             progressMeter.Value = 1.0; //%
             teams[team].UnitCreationProgress.Add(unit, progressMeter);
 
-            progressMeter.AddOverTime(600, 600);
+            progressMeter.AddOverTime(maxGameLenInS*trickleRate, maxGameLenInS);
 
             ProgressBar progressBar = new ProgressBar(100, 30, progressMeter);
             progressBar.Angle = targetBar.Angle;
@@ -232,21 +246,53 @@ public class IhmisetVsHirviot : Game
 
     void CreateNewUnit(PlayerTeam team, UnitType type, Vector spawnPoint, Vector gatherPoint)
     {
-        GameObject unit = new GameObject(20, 20, Shape.Circle);
+        teams[team].UnitCreationProgress[type].Value = 0;
+        GameObject unit = new GameObject(30, 30, Shape.Circle);
         unit.Position = spawnPoint;
+        unit.Tag = new KeyValuePair<PlayerTeam, UnitType>(team, type);
         Add(unit);
 
+        if (team==PlayerTeam.Humans)
+        {
+            switch (type)
+            {
+                case UnitType.Preparer:
+                    unit.Image = hPreparer;
+                    break;
+                case UnitType.Repeller:
+                    unit.Image = hRepeller;
+                    break;
+                case UnitType.Gatherer:
+                    unit.Image = hGatherer;
+                    break;
+                default:
+                    break;
+            }
+        }
+        else
+        {
+            switch (type)
+            {
+                case UnitType.Preparer: 
+                    unit.Image = mPreparer;
+                    break;
+                case UnitType.Repeller:
+                    unit.Image = mRepeller;
+                    break;
+                case UnitType.Gatherer:
+                    unit.Image = mGatherer;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        // Start moving to deploy point and add to deploy queue.
         Vector moveToPos = gatherPoint + new Vector(40 * teams[team].DeployQueue.Count, 0);
         unit.MoveTo(moveToPos, MOVE_TO_QUEUE_SPEED);
-
         if (teams[team].DeployQueue.Count==0)
             Timer.SingleShot( moveToPos.Magnitude / MOVE_TO_QUEUE_SPEED / 2.0, () => CanDeploy(team) );
-
         teams[team].DeployQueue.AddLast(unit);
-
-        teams[team].UnitCreationProgress[type].Value = 0;
-
-        // TODO: Create a new unit to specified position
     }
 
     void CanDeploy(PlayerTeam team)
@@ -259,6 +305,10 @@ public class IhmisetVsHirviot : Game
 
     void Deploy(PlayerTeam team, int pathIndex)
     {
+        //teams[team].DeployQueue.AddLast(unit);
+        //paths[pathIndex]
+
+        // Futher queue
     }
 
     void ResourceAdded(PlayerTeam team, double amount)
@@ -270,7 +320,7 @@ public class IhmisetVsHirviot : Game
         }
 
         // FOR TESTING ONLY REMOVE THESE 
-        Timer.SingleShot(RandomGen.NextDouble(0.1, 4.0), () => ResourceAdded(team, 10.0));
+        Timer.SingleShot(RandomGen.NextDouble(0.1, 4.0), () => ResourceAdded(team, amountPerResource));
     }
 
 }
