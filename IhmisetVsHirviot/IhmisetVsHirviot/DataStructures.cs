@@ -23,6 +23,6 @@ class PlayerData
 {
     public Dictionary<UnitType, DoubleMeter> UnitCreationAllocation = new Dictionary<UnitType, DoubleMeter>();
     public Dictionary<UnitType, DoubleMeter> UnitCreationProgress = new Dictionary<UnitType, DoubleMeter>();
-    public LinkedList<GameObject> DeployQueue = new LinkedList<GameObject>();
+    public LinkedList<PhysicsObject> DeployQueue = new LinkedList<PhysicsObject>();
     public Dictionary<int, GameObject> DeployButtons = new Dictionary<int, GameObject>();
 }
