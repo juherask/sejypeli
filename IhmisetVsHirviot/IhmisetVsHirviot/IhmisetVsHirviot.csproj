@@ -118,6 +118,7 @@
   <ItemGroup>
     <Content Include="Game.ico" />
     <Content Include="GameThumbnail.png" />
+    <Content Include="lev1.txt" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\IhmisetVsHirviotContent\IhmisetVsHirviotContent.contentproj">

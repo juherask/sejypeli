@@ -8,25 +8,28 @@ using Jypeli.Effects;
 using Jypeli.Widgets;
 
 /* TODO:
- * - Make preparer / Gatherer to move to closest resource and back home.
+ * - Make Gatherer to return to deploy point via gather point (where it drops off resources).
+ * - When a unit in deploy point leaves (is kicked off) further queue.
+ * - Tree with log? Should it be plantable?
  */
 
 public class IhmisetVsHirviot : PhysicsGame
 {
     // Gameplay constants
-    double amountPerResource = 20.0;
-    double maxGameLenInS = 600.0;
-    double trickleRate = 2.0;
-    double unitMoveSpeed = 50.0;
-    double maxTreeRange = 100.0;
-    double hitPerHit = -10.0;
+    static double unitMoveSpeed = 50.0;
+    static double maxTreeRange = 200.0;
+    static double hitPerHit = -10.0;
+    static double handleResourceTime = 2.0;
 
+    static double amountPerResource = 20.0;
+    static double resourcesTrickleAmount = 5.0;
+    static double trickleRate = 0.33;
 
-    double MOVE_TO_QUEUE_SPEED = 50.0;
     Color[] BARCOLORS = new Color[] { Color.Cyan, Color.Lime, Color.Red };
     Dictionary<PlayerTeam, PlayerData> teams = new Dictionary<PlayerTeam, PlayerData>();
     List<RoadMap> paths = new List<RoadMap>();
     List<PhysicsObject> trees = new List<PhysicsObject>();
+    Dictionary<PhysicsObject, Vector?> stayOnTarget = new Dictionary<PhysicsObject, Vector?>();
 
     Image stumpImage = LoadImage("stump");
     Image logImage = LoadImage("log");
@@ -40,10 +43,9 @@ public class IhmisetVsHirviot : PhysicsGame
     Image mRepeller = LoadImage("hirvio");
     Image mGatherer = LoadImage("karhu");
 
-    static Vector GatherPoint(PlayerTeam team)
-    {
-        return new Vector(0, team == PlayerTeam.Humans ? Screen.Top - 135 : Screen.Bottom + 135);
-    }
+    Image pathImage = LoadImage("ns_narrow");
+
+    Dictionary<PlayerTeam, Vector> GatherPoints;
 
     public override void Begin()
     {
@@ -53,6 +55,11 @@ public class IhmisetVsHirviot : PhysicsGame
         PhoneBackButton.Listen(ConfirmExit, "Lopeta peli");
         Keyboard.Listen(Key.Escape, ButtonState.Pressed, ConfirmExit, "Lopeta peli");
    
+        GatherPoints = new Dictionary<PlayerTeam, Vector>(){
+            { PlayerTeam.Humans, new Vector(0,  Screen.Top - 135) },
+            { PlayerTeam.Monsters, new Vector(0,  Screen.Bottom + 135) }
+        };
+
         CreateMeterFactories(PlayerTeam.Humans);
         CreateMeterFactories(PlayerTeam.Monsters);
 
@@ -60,19 +67,155 @@ public class IhmisetVsHirviot : PhysicsGame
 
         Mouse.IsCursorVisible = true;
 
-        // FOR TESTING ONLY REMOVE THESE 
-        Timer.SingleShot(RandomGen.NextDouble(0.1, 4.0), () => OnResourceAdded(PlayerTeam.Humans, amountPerResource));
-        Timer.SingleShot(RandomGen.NextDouble(0.1, 4.0), () => OnResourceAdded(PlayerTeam.Monsters, amountPerResource));
+        Timer.SingleShot(trickleRate, () => OnResourceAdded(PlayerTeam.Humans, resourcesTrickleAmount, true));
+        Timer.SingleShot(trickleRate, () => OnResourceAdded(PlayerTeam.Monsters, resourcesTrickleAmount, true));
     }
 
+    #region LevelSetupFromFile
+    void LoadLevel(string name)
+    {
+        TileMap kentta = TileMap.FromLevelAsset(name);
+        // Paths coming from east
+        kentta.SetTileMethod('w', AddPathTile, "en");
+        kentta.SetTileMethod('s', AddPathTile, "ew");
+        kentta.SetTileMethod('z', AddPathTile, "es");
+        // Paths coming from north
+        kentta.SetTileMethod('d', AddPathTile, "ne");
+        kentta.SetTileMethod('f', AddPathTile, "nw");
+        kentta.SetTileMethod('c', AddPathTile, "ns");
+        // Paths coming from south
+        kentta.SetTileMethod('y', AddPathTile, "sn");
+        kentta.SetTileMethod('g', AddPathTile, "se");
+        kentta.SetTileMethod('h', AddPathTile, "sw");
+        // Paths coming from west
+        kentta.SetTileMethod('i', AddPathTile, "wn");
+        kentta.SetTileMethod('j', AddPathTile, "we");
+        kentta.SetTileMethod('m', AddPathTile, "ws");
+        // Tree
+        kentta.SetTileMethod('t', AddTreeTile, treeImage);
+        kentta.SetTileMethod('u', AddTreeTile, stumpImage);
+        kentta.SetTileMethod('l', AddTreeTile, logImage);
+        // Source / sink
+        kentta.SetTileMethod('1', AddDeployPoint, PlayerTeam.Humans);
+        kentta.SetTileMethod('2', AddDeployPoint, PlayerTeam.Monsters);
+
+        kentta.Execute(60, 60);
+
+        // Give some time for the added objects to be added and then build path points
+        Timer.SingleShot(0.1, BuildPathsFromTiles);
+    }
+    void BuildPathsFromTiles()
+    {
+        // Start from human base and built from there
+        var humanBaseTile = GetObjectAt(GatherPoints[PlayerTeam.Humans]);
+        // TODO: For now, only 3 way tile is supported
+        if (humanBaseTile.Tag != "esw") throw new NotSupportedException("Only 3 way base tiles are supported in the prototype");
+
+        
+        for (int i = 0; i < 3; i++)
+		{
+            List<Vector> naviPts = new List<Vector>();
+            Vector toPt = humanBaseTile.Position;
+            naviPts.Add(toPt);
+			do {
+                var tile = GetObjectAt(toPt);
+                toPt = tile.Position; // Avoid straying from the grid
+                char direction = ((string)tile.Tag)[1];
+                if (tile.Tag=="esw")
+                {
+                    if (i==0) 
+                        direction = 'e';
+                    else if (i==1)
+                        direction = 'w';
+                    else if (i==2)
+                        direction = 's';
+                }
+                
+                switch ( direction )
+	            {
+                    case 'n':
+                        toPt = toPt + new Vector(0, +60);// to north
+                        break;
+		            case 'e':
+                        toPt = toPt + new Vector(-60, 0);// to east
+                        break;
+                    case 'w':
+                        toPt = toPt + new Vector(+60, 0);// to west
+                        break;
+                    case 's':
+                        toPt = toPt + new Vector(0, -60);// to south
+                        break;
+                    default:
+                        break;
+	            }
+                naviPts.Add(tile.Position);
+            } while (toPt!=GatherPoints[PlayerTeam.Monsters]);
+            naviPts.Add(GatherPoints[PlayerTeam.Monsters]);
+
+            RoadMap path = new RoadMap(naviPts);
+            path.DefaultWidth = 10.0;
+            path.Insert();
+            paths.Add(path);
+
+            foreach (var segment in path.Segments)
+            {
+                // used only for guiding units
+                segment.IsVisible = false;
+            }
+		}
+    }
+    void AddPathTile(Vector pos, double width, double height, string shape)
+    {
+        GameObject path = new GameObject(width, height);
+        // only one from-to pair image is in resources, so try both ways
+        try 
+	    {
+            path.Image = LoadImage(shape);
+	    }
+	    catch (Exception)
+	    {
+            path.Image = LoadImage(shape.Reverse().ToString() );
+	    }
+        path.Position = pos;
+        path.Tag = shape;
+        Add(path);    
+    }
+
+    void AddTreeTile(Vector pos, double width, double height, Image treeState)
+    {
+        PhysicsObject tree = new PhysicsObject(width, height);
+        tree.Image = treeState;
+        tree.Position = pos;
+        tree.IgnoresCollisionResponse = true;
+        Add(tree);
+
+        AddCollisionHandler(tree, "h", OnUnitMeetsTreeResource);
+        AddCollisionHandler(tree, "m", OnUnitMeetsTreeResource);
+
+        trees.Add(tree);
+    }
+
+    void AddDeployPoint(Vector pos, double width, double height, PlayerTeam team)
+    {
+        string shape = (team == PlayerTeam.Humans ? "esw" : "enw");
+        GameObject crossroad = new GameObject(width, height);
+        crossroad.Image = LoadImage(shape);
+        crossroad.Position = pos;
+        crossroad.Tag = shape;
+        Add(crossroad);
+        GatherPoints[team] = pos;
+    }
+    #endregion
+
+    #region LevelSetupRandom
     void AddPaths()
     {
         double PATH_SEG_LEN_MIN = 50;
         double PATH_SEG_LEN_MAX = 70;
         double TO_SIDE_ANGLE = 60;
 
-        var fromHumansToMonsters = GatherPoint(PlayerTeam.Monsters) - GatherPoint(PlayerTeam.Humans);
-        var fromMonstersToHumans = GatherPoint(PlayerTeam.Humans) - GatherPoint(PlayerTeam.Monsters);
+        var fromHumansToMonsters = GatherPoints[PlayerTeam.Monsters] - GatherPoints[PlayerTeam.Humans];
+        var fromMonstersToHumans = GatherPoints[PlayerTeam.Humans] - GatherPoints[PlayerTeam.Monsters];
         // TODO: Load these from files OR generate progomatically
         List<Vector[]> pathsPts = new List<Vector[]>();
 
@@ -81,19 +224,19 @@ public class IhmisetVsHirviot : PhysicsGame
             pathsPts.Add(
                 new Vector[] // first path
                 {
-                    GatherPoint(PlayerTeam.Humans),
-                    GatherPoint(PlayerTeam.Humans) + Vector.FromLengthAndAngle( RandomGen.NextDouble(PATH_SEG_LEN_MIN,PATH_SEG_LEN_MAX),
+                    GatherPoints[PlayerTeam.Humans],
+                    GatherPoints[PlayerTeam.Humans] + Vector.FromLengthAndAngle( RandomGen.NextDouble(PATH_SEG_LEN_MIN,PATH_SEG_LEN_MAX),
                         fromHumansToMonsters.Angle+Angle.FromDegrees(i*TO_SIDE_ANGLE)),
-                    GatherPoint(PlayerTeam.Humans) + Vector.FromLengthAndAngle( RandomGen.NextDouble(PATH_SEG_LEN_MIN*2,PATH_SEG_LEN_MAX*2),
+                    GatherPoints[PlayerTeam.Humans] + Vector.FromLengthAndAngle( RandomGen.NextDouble(PATH_SEG_LEN_MIN*2,PATH_SEG_LEN_MAX*2),
                         fromHumansToMonsters.Angle+RandomGen.NextAngle(Angle.FromDegrees(i*TO_SIDE_ANGLE-10), Angle.FromDegrees(i*TO_SIDE_ANGLE+10)) ),
-                    GatherPoint(PlayerTeam.Humans) + Vector.FromLengthAndAngle( RandomGen.NextDouble(PATH_SEG_LEN_MIN*3,PATH_SEG_LEN_MAX*3),
+                    GatherPoints[PlayerTeam.Humans] + Vector.FromLengthAndAngle( RandomGen.NextDouble(PATH_SEG_LEN_MIN*3,PATH_SEG_LEN_MAX*3),
                         fromHumansToMonsters.Angle+RandomGen.NextAngle(Angle.FromDegrees(i*TO_SIDE_ANGLE-10), Angle.FromDegrees(i*TO_SIDE_ANGLE+10)) ), // midp
-                    GatherPoint(PlayerTeam.Monsters) + Vector.FromLengthAndAngle( RandomGen.NextDouble(PATH_SEG_LEN_MIN*2,PATH_SEG_LEN_MAX*2),
+                    GatherPoints[PlayerTeam.Monsters] + Vector.FromLengthAndAngle( RandomGen.NextDouble(PATH_SEG_LEN_MIN*2,PATH_SEG_LEN_MAX*2),
                         fromMonstersToHumans.Angle+RandomGen.NextAngle(Angle.FromDegrees(-i*TO_SIDE_ANGLE-10), Angle.FromDegrees(-i*TO_SIDE_ANGLE+10)) ),
-                    GatherPoint(PlayerTeam.Monsters) + Vector.FromLengthAndAngle( RandomGen.NextDouble(PATH_SEG_LEN_MIN,PATH_SEG_LEN_MAX),
+                    GatherPoints[PlayerTeam.Monsters] + Vector.FromLengthAndAngle( RandomGen.NextDouble(PATH_SEG_LEN_MIN,PATH_SEG_LEN_MAX),
                         fromMonstersToHumans.Angle+Angle.FromDegrees(-i*TO_SIDE_ANGLE)),
-                    GatherPoint(PlayerTeam.Monsters)+new Vector(0.01,0.01),
-                    GatherPoint(PlayerTeam.Monsters),
+                    GatherPoints[PlayerTeam.Monsters]+new Vector(0.01,0.01),
+                    GatherPoints[PlayerTeam.Monsters],
                 }
             );
         }
@@ -105,6 +248,13 @@ public class IhmisetVsHirviot : PhysicsGame
             path.Insert();
 
             paths.Add(path);
+
+            // TODO: Use CreateSegmentFunction to create path with path texture
+            /*foreach (var segment in path.Segments)
+            {
+                segment.Image = pathImage;
+                segment.TextureWrapSize = new Vector(0, segment.Height / pathImage.Height);
+            }*/
 
             for (int i = 2; i < pathPoints.Length-2; i++)
 			{
@@ -118,7 +268,36 @@ public class IhmisetVsHirviot : PhysicsGame
     {
         for (int i = 0; i < amount; i++)
         {
-            Vector position = point + RandomGen.NextVector(40, maxTreeRange);
+            // Validate random point
+            Vector position = point + RandomGen.NextVector(10, maxTreeRange);
+            bool overlapsOtherTree = false;
+            foreach (var tree in trees)
+            {
+                if (Vector.Distance(tree.Position, position)<40.0)
+                {
+                    overlapsOtherTree = true;
+                    break;
+                }
+            }
+
+            bool overlapsControls = false;
+            if (Vector.Distance(GatherPoints[PlayerTeam.Humans], position)<200.0)
+                overlapsControls = true;
+            if (Vector.Distance(GatherPoints[PlayerTeam.Monsters], position)<200.0)
+                overlapsControls = true;
+
+            bool insideScreen = false;
+            if (position.X > Screen.LeftSafe + 30 && position.X < Screen.RightSafe - 30 &&
+                position.Y > Screen.BottomSafe + 30 && position.Y < Screen.TopSafe - 30)
+                insideScreen = true;
+
+            // Try again
+            if (!insideScreen || overlapsControls || overlapsOtherTree)
+            {
+                i--;
+                continue;
+            }
+
 
             Image treeState = null;
             switch (RandomGen.NextInt(3))
@@ -139,12 +318,17 @@ public class IhmisetVsHirviot : PhysicsGame
             var treeObj = PhysicsObject.CreateStaticObject(treeState);
             treeObj.Position = position;
             treeObj.IgnoresCollisionResponse = true;
-            Add(treeObj);
 
+            Add(treeObj);
             trees.Add(treeObj);
+
+            AddCollisionHandler(treeObj, "h", OnUnitMeetsTreeResource);
+            AddCollisionHandler(treeObj, "m", OnUnitMeetsTreeResource);
         }
     }
+    #endregion
 
+    #region SetUpControls
     void AddButtons(PlayerTeam team, Vector deployPoint, int degree)
     {
         double baseAngle = team==PlayerTeam.Humans ? 205 : 125;
@@ -174,6 +358,74 @@ public class IhmisetVsHirviot : PhysicsGame
         }
     }
 
+    void CreateMeterFactories(PlayerTeam team)
+    {
+
+        teams[team] = new PlayerData();
+        for (int i = 0; i < 3; i++)
+        {
+            Color barBaseColor = BARCOLORS[i];
+            // Next messy line just fetches enum value by index
+            UnitType unit = (UnitType)(Enum.GetValues(typeof(UnitType)).GetValue(i));
+
+            // Target when a new unit is produced
+            DoubleMeter targetMeter = new DoubleMeter(0);
+            targetMeter.MaxValue = 100.0; //%
+            targetMeter.Value = 33.3; //%
+            teams[team].UnitCreationAllocation.Add(unit, targetMeter);
+
+            ProgressBar targetBar = new ProgressBar(100, 30, targetMeter);
+            targetBar.Angle = Angle.FromDegrees(90);
+            targetBar.X = (i - 1) * 50;
+            targetBar.Y = team == PlayerTeam.Humans ? Screen.Top - 55 : Screen.Bottom + 55;
+            targetBar.BorderColor = Color.Black;
+            var bcol = Color.Darker(barBaseColor, 75);
+            bcol.AlphaComponent = 125;
+            targetBar.BarColor = bcol;
+
+            targetBar.BorderColor = Color.Black;
+            Add(targetBar, 2);
+
+            Mouse.ListenOn(targetBar, MouseButton.Left, ButtonState.Released, () => ChangeResouceAllocation(team, targetBar), "Click do change resource allocation");
+
+            // Progress to target (when a new unit is produced)
+            DoubleMeter progressMeter = new DoubleMeter(0);
+            progressMeter.MaxValue = 100.0; //%
+            progressMeter.Value = 1.0; //%
+            teams[team].UnitCreationProgress.Add(unit, progressMeter);
+
+            //progressMeter.AddOverTime(maxGameLenInS * trickleRate, maxGameLenInS);
+
+            ProgressBar progressBar = new ProgressBar(100, 30, progressMeter);
+            progressBar.Angle = targetBar.Angle;
+            progressBar.Position = targetBar.Position;
+            progressBar.BorderColor = Color.Black;
+            progressBar.Color = Color.Darker(barBaseColor, 150);
+            progressBar.BarColor = barBaseColor;
+            Add(progressBar, 1);
+
+            progressMeter.AddTrigger(100.0, TriggerDirection.Up, () => CreateNewUnit(
+                team, unit,
+                targetBar.Position + new Vector(0, team == PlayerTeam.Humans ? -65 : 65),
+                GatherPoints[team]
+                ));
+        }
+
+        switch (team)
+        {
+            case PlayerTeam.Humans:
+                AddButtons(team, GatherPoints[team], 3);
+                break;
+            case PlayerTeam.Monsters:
+                AddButtons(team, GatherPoints[team], 3);
+                break;
+        }
+
+
+    }
+    #endregion
+
+    #region ActOnSomething
     void ChangeResouceAllocation(PlayerTeam team, ProgressBar bar)
     {
         DoubleMeter clickedTarget = bar.Meter as DoubleMeter;
@@ -188,72 +440,6 @@ public class IhmisetVsHirviot : PhysicsGame
             if (item!=clickedTarget)
                 item.Value += -delta / 2;
         }
-    }
-
-    void CreateMeterFactories(PlayerTeam team)
-    {
-        
-        teams[team] = new PlayerData();
-        for (int i = 0; i < 3; i++)
-        {
-            Color barBaseColor = BARCOLORS[i];
-            // Next messy line just fetches enum value by index
-            UnitType unit = (UnitType)(Enum.GetValues(typeof(UnitType)).GetValue(i));
-
-            // Target when a new unit is produced
-            DoubleMeter targetMeter = new DoubleMeter(0);
-            targetMeter.MaxValue = 100.0; //%
-            targetMeter.Value = 33.3; //%
-            teams[team].UnitCreationAllocation.Add(unit, targetMeter);
-            
-            ProgressBar targetBar = new ProgressBar(100, 30, targetMeter);
-            targetBar.Angle = Angle.FromDegrees(90);
-            targetBar.X = (i - 1) * 50;
-            targetBar.Y = team == PlayerTeam.Humans ? Screen.Top - 55 : Screen.Bottom + 55;
-            targetBar.BorderColor = Color.Black;
-            var bcol = Color.Darker(barBaseColor, 75);
-            bcol.AlphaComponent = 125;
-            targetBar.BarColor = bcol;
-            
-            targetBar.BorderColor = Color.Black;
-            Add(targetBar, 2);
-
-            Mouse.ListenOn(targetBar, MouseButton.Left, ButtonState.Released, () => ChangeResouceAllocation(team, targetBar), "Click do change resource allocation");
-
-            // Progress to target (when a new unit is produced)
-            DoubleMeter progressMeter = new DoubleMeter(0);
-            progressMeter.MaxValue = 100.0; //%
-            progressMeter.Value = 1.0; //%
-            teams[team].UnitCreationProgress.Add(unit, progressMeter);
-
-            progressMeter.AddOverTime(maxGameLenInS*trickleRate, maxGameLenInS);
-
-            ProgressBar progressBar = new ProgressBar(100, 30, progressMeter);
-            progressBar.Angle = targetBar.Angle;
-            progressBar.Position = targetBar.Position;
-            progressBar.BorderColor = Color.Black;
-            progressBar.Color = Color.Darker(barBaseColor, 150);
-            progressBar.BarColor = barBaseColor;
-            Add(progressBar, 1);
-
-            progressMeter.AddTrigger(100.0, TriggerDirection.Up, () => CreateNewUnit(
-                team, unit,
-                targetBar.Position + new Vector(0, team == PlayerTeam.Humans ? -65 : 65),
-                GatherPoint(team)
-                ));
-        }
-
-        switch (team)
-        {
-            case PlayerTeam.Humans:
-                AddButtons(team, GatherPoint(team), 3);
-                break;
-            case PlayerTeam.Monsters:
-                AddButtons(team, GatherPoint(team), 3);
-                break;
-        }
-
-        
     }
 
     void CreateNewUnit(PlayerTeam team, UnitType type, Vector spawnPoint, Vector gatherPoint)
@@ -324,21 +510,78 @@ public class IhmisetVsHirviot : PhysicsGame
         }
 
         // Start moving to deploy point and add to deploy queue.
-        Vector moveToPos = gatherPoint + new Vector(40 * teams[team].DeployQueue.Count, 0);
-        unit.MoveTo(moveToPos, MOVE_TO_QUEUE_SPEED);
-        if (teams[team].DeployQueue.Count == 0)
-        {
-            double untilNext = DistanceAndSpeedToTime(moveToPos.Magnitude, MOVE_TO_QUEUE_SPEED);
-            Timer.SingleShot(untilNext, () => OnCanDeploy(team));
-        }
-        teams[team].DeployQueue.AddLast(unit);
+        MoveToDeployQueue(team, unit, 0);
 
         AddCollisionHandler(unit, enemyTag, OnEnemiesCollide);
     }
 
+    private void MoveToDeployQueue(PlayerTeam team, PhysicsObject unit, double addResources)
+    {
+        Vector moveToPos = GatherPoints[team] + new Vector(40 * teams[team].DeployQueue.Count, 0);
+        unit.MoveTo(moveToPos, unitMoveSpeed, () => OnCanDeploy(team));
+        stayOnTarget[unit] = moveToPos;
+        teams[team].DeployQueue.AddLast(unit);
+
+        if (addResources > 0)
+            OnResourceAdded(team, addResources, false);
+    }
+
+    private bool MoveToClosestTree(PhysicsObject unit, Image treeState)
+    {
+        // TODO. Very very ugly LINQ stuff. (OTOH it is a very short list)
+        double closestTreeDistance = (trees.Where(t => t.Image == treeState)).Min(t => Vector.Distance(unit.Position, t.Position));
+        PhysicsObject closestTree = (trees.Where(t => t.Image == treeState && Vector.Distance(unit.Position, t.Position) == closestTreeDistance)).First();
+
+        // Closest full grown tree
+        if (Vector.Distance(unit.Position, closestTree.Position) < maxTreeRange)
+        {
+            stayOnTarget[unit] = closestTree.Position;
+            unit.MoveTo(closestTree.Position, unitMoveSpeed);
+            return true;
+        }
+        return false;
+    }
+    #endregion
+
+    #region EventHandlers
+    void OnUnitMeetsTreeResource(PhysicsObject tree, PhysicsObject unit)
+    {
+        if (unit.Image == hGatherer && tree.Image == logImage)
+        {
+            Timer.SingleShot(handleResourceTime, () => OnOperateTree(tree, stumpImage, unit, PlayerTeam.Humans));
+        }
+        if (unit.Image == hPreparer && tree.Image == treeImage)
+        {   
+            Timer.SingleShot(handleResourceTime, () => OnOperateTree(tree, logImage, unit, PlayerTeam.Humans));
+        }
+
+        if (unit.Image == mPreparer && (tree.Image == stumpImage))
+        {
+            Timer.SingleShot(handleResourceTime, () => OnOperateTree(tree, treeImage, unit, PlayerTeam.Monsters));
+        }
+        if (unit.Image == mGatherer && tree.Image == treeImage)
+        {
+            Timer.SingleShot(handleResourceTime, () => OnOperateTree(tree, treeImage, unit, PlayerTeam.Monsters));
+        }
+    }
+  
+    void OnOperateTree(PhysicsObject tree, Image newState, PhysicsObject unitToQueue, PlayerTeam team)
+    {
+        tree.Image = newState;
+
+        double resources = 0.0;
+        if (unitToQueue.Image == mGatherer || unitToQueue.Image == mGatherer)
+        {
+            resources = amountPerResource;
+        }
+
+        // Unit reuse
+        MoveToDeployQueue(team, unitToQueue, resources);
+    }
+
     void OnEnemiesCollide(PhysicsObject thisCollides, PhysicsObject toThat)
     {
-        if (thisCollides.Tag == "h" && thisCollides.Tag == "m")
+        if (thisCollides.Tag == "h" && toThat.Tag == "m")
         {
             OnEnemiesCollide(toThat, thisCollides);
             return;
@@ -384,10 +627,12 @@ public class IhmisetVsHirviot : PhysicsGame
             thatHitMultiplier = 0.5;
         }
 
-        // Lock into deadly? combat 
-        
-        thisCollides.MoveTo(toThat.Position, unitMoveSpeed);
-        toThat.MoveTo(thisCollides.Position, unitMoveSpeed);
+        // Make sure we are locked into deadly? combat.
+        //  This requires us to make sure we try to move to the end of the line.
+        if ( stayOnTarget.Keys.Contains(thisCollides) && stayOnTarget[thisCollides]!=null)
+            thisCollides.MoveTo(stayOnTarget[thisCollides].Value, unitMoveSpeed);
+        if ( stayOnTarget.Keys.Contains(toThat) && stayOnTarget[toThat]!=null)
+            thisCollides.MoveTo(stayOnTarget[toThat].Value, unitMoveSpeed);
 
         // First subobject is assumed to be health bar
         DoubleMeter hp1 = (DoubleMeter)(thisCollides.Objects.First() as ProgressBar).Meter;
@@ -400,7 +645,7 @@ public class IhmisetVsHirviot : PhysicsGame
     {
         unit.StopMoveTo();
         unit.IgnoresCollisionResponse = true;
-        unit.MoveTo(new Vector(unit.X > 0 ? Screen.Right + 100 : Screen.Left - 100, unit.Y), MOVE_TO_QUEUE_SPEED);
+        unit.MoveTo(new Vector(unit.X > 0 ? Screen.Right + 100 : Screen.Left - 100, unit.Y), unitMoveSpeed);
     }
 
     void OnCanDeploy(PlayerTeam team)
@@ -427,16 +672,20 @@ public class IhmisetVsHirviot : PhysicsGame
         if (teams[team].DeployQueue.Count > 1)
         {
             Vector moveToPos = Vector.Zero;
-            for (int i = 1; i < teams[team].DeployQueue.Count; i++)
+            PhysicsObject moveUnit = null;
+            for (int i = 2; i < teams[team].DeployQueue.Count; i++)
             {
-                moveToPos = GatherPoint(team) + new Vector(40 * (i-1), 0);
-                var moveUnit = teams[team].DeployQueue.ElementAt(i);
-                moveUnit.MoveTo(moveToPos, MOVE_TO_QUEUE_SPEED);
+                moveToPos = GatherPoints[team] + new Vector(40 * (i-1), 0);
+                moveUnit = teams[team].DeployQueue.ElementAt(i);
+                moveUnit.MoveTo(moveToPos, unitMoveSpeed);
+                stayOnTarget[moveUnit] = moveToPos;
             }
 
+            moveToPos = GatherPoints[team];
+            moveUnit = teams[team].DeployQueue.ElementAt(1);
             // Allow deploy when the queue has stopped moving
-            double untilNext = DistanceAndSpeedToTime(moveToPos.Magnitude, MOVE_TO_QUEUE_SPEED);
-            Timer.SingleShot(untilNext, () => OnCanDeploy(team));
+            moveUnit.MoveTo(moveToPos, unitMoveSpeed, () => OnCanDeploy(team));
+            stayOnTarget[moveUnit] = moveToPos;
         }
 
         // Deploy the first unit
@@ -461,30 +710,43 @@ public class IhmisetVsHirviot : PhysicsGame
         if (unit.IgnoresCollisionResponse)
             return;
  
-        Vector moveToPos = path.Segments[index].Position;
-        unit.MoveTo(moveToPos, unitMoveSpeed);
-
         // determine in which turn to traverse the path
         int increment = +1;
         if (unit.Tag == "m")
             increment = -1;
 
-        // TODO: Determine if to gather resources
+        if (unit.Image == hPreparer || unit.Image == mGatherer)
+        {
+            if (MoveToClosestTree(unit, treeImage)) return;
+        }
 
-        // Stop at the end of the path
+        if (unit.Image == hGatherer)
+        {
+            if (MoveToClosestTree(unit, logImage)) return;
+        }
+
+        if (unit.Image == mPreparer)
+        {
+            if (MoveToClosestTree(unit, stumpImage)) return;
+        }
+    
+        Vector moveToPos = path.Segments[index].Position;
+
         if (index + increment >= 0 && index + increment < path.Segments.Length)
         {
-            double untilNext = DistanceAndSpeedToTime(moveToPos.Magnitude, unitMoveSpeed);
-            Timer.SingleShot(untilNext, () => OnMoveUnit(unit, index + increment, path));
+            unit.MoveTo(moveToPos, unitMoveSpeed, () => OnMoveUnit(unit, index + increment, path));
+            stayOnTarget[unit] = null;
         }
+        else
+        {
+            // Stop at the end of the path
+            unit.MoveTo(moveToPos, unitMoveSpeed);
+            stayOnTarget[unit] = moveToPos;
+        }
+        
     }
 
-    static double DistanceAndSpeedToTime(double distance, double speed)
-    {
-        return 1.0+distance / (speed*5);
-    }
-
-    void OnResourceAdded(PlayerTeam team, double amount)
+    void OnResourceAdded(PlayerTeam team, double amount, bool trickle)
     {
         foreach (var kvp in teams[team].UnitCreationProgress)
         {
@@ -492,8 +754,8 @@ public class IhmisetVsHirviot : PhysicsGame
             kvp.Value.AddValue(portion);
         }
 
-        // FOR TESTING ONLY REMOVE THESE 
-        Timer.SingleShot(RandomGen.NextDouble(0.1, 4.0), () => OnResourceAdded(team, amountPerResource));
+        if (trickle)
+            Timer.SingleShot(trickleRate, () => OnResourceAdded(team, resourcesTrickleAmount, true));
     }
-
+#endregion
 }
