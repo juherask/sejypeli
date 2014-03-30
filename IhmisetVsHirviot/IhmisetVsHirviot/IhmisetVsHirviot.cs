@@ -63,7 +63,11 @@ public class IhmisetVsHirviot : PhysicsGame
         CreateMeterFactories(PlayerTeam.Humans);
         CreateMeterFactories(PlayerTeam.Monsters);
 
-        AddPaths();
+        MultiSelectWindow mainMenu = new MultiSelectWindow("Pelin alkuvalikko", "Satunnainen kenttä", "Kenttä tiedostosta", "Lopeta");
+        mainMenu.AddItemHandler(0, CreateRandomLevel);
+        mainMenu.AddItemHandler(1, ()=>LoadLevel("lev1"));
+        mainMenu.AddItemHandler(2, Exit);
+        Add(mainMenu);
 
         Mouse.IsCursorVisible = true;
 
@@ -119,6 +123,9 @@ public class IhmisetVsHirviot : PhysicsGame
             naviPts.Add(toPt);
 			do {
                 var tile = GetObjectAt(toPt);
+                if (!(tile.Tag is string) || ((string)tile.Tag)=="")
+                    continue;
+
                 toPt = tile.Position; // Avoid straying from the grid
                 char direction = ((string)tile.Tag)[1];
                 if (tile.Tag=="esw")
@@ -168,14 +175,7 @@ public class IhmisetVsHirviot : PhysicsGame
     {
         GameObject path = new GameObject(width, height);
         // only one from-to pair image is in resources, so try both ways
-        try 
-	    {
-            path.Image = LoadImage(shape);
-	    }
-	    catch (Exception)
-	    {
-            path.Image = LoadImage(shape.Reverse().ToString() );
-	    }
+        path.Image = LoadImage(String.Concat(shape.OrderBy(c => c)));
         path.Position = pos;
         path.Tag = shape;
         Add(path);    
@@ -208,7 +208,7 @@ public class IhmisetVsHirviot : PhysicsGame
     #endregion
 
     #region LevelSetupRandom
-    void AddPaths()
+    void CreateRandomLevel()
     {
         double PATH_SEG_LEN_MIN = 50;
         double PATH_SEG_LEN_MAX = 70;

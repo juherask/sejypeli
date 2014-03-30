@@ -118,7 +118,7 @@
       <Processor>TextureProcessor</Processor>
     </Compile>
     <Compile Include="ne.png">
-      <Name>ne</Name>
+      <Name>en</Name>
       <Importer>TextureImporter</Importer>
       <Processor>TextureProcessor</Processor>
     </Compile>
@@ -133,7 +133,7 @@
       <Processor>TextureProcessor</Processor>
     </Compile>
     <Compile Include="se.png">
-      <Name>se</Name>
+      <Name>es</Name>
       <Importer>TextureImporter</Importer>
       <Processor>TextureProcessor</Processor>
     </Compile>
