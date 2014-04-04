@@ -28,8 +28,8 @@ class GameRecord
 */
 public class TarkistaOppilaidenPelit : Game
 {
-    string SVN_CLI_EXE = @"svn";
-    string MSBUILD_EXE = @"C:\Program Files (x86)\MSBuild\12.0\Bin";
+    string SVN_CLI_EXE = @"C:\Program Files\TortoiseSVN\bin\svn.exe";
+    string MSBUILD_EXE = @"C:\Program Files (x86)\MSBuild\12.0\Bin\MsBuild.exe";
     double TASK_COMPLETION_POLL_INTERVAL = 1.0;
 
     Queue<Tuple<GameRecord, Task, string>> taskQueue; // string is free paramter used when processing updates
@@ -234,6 +234,18 @@ public class TarkistaOppilaidenPelit : Game
 
     List<GameRecord> GetHardCodedList()
     {
+        return new List<GameRecord>(){
+            new GameRecord(){
+                Author="Atte",
+                GameName="Crazy Greg",
+                SVNRepo=@"https://github.com/JeesMies00/sejypeli.git",
+                ToFetch=new List<string>(){
+                    @"trunk\GrazyGreg.sln",
+                    @"trunk\GrazyGreg"
+                },
+                Solution=@"trunk\GrazyGreg.sln"},
+        };
+
         // Jos monta oppilasta tekee samaa peliä, käytä nimenä molempia "Jaakko&Jussi"
         //  Ei välejä
         return new List<GameRecord>(){
@@ -242,75 +254,75 @@ public class TarkistaOppilaidenPelit : Game
                 GameName="Zombie Swing",
                 SVNRepo="https://github.com/magishark/sejypeli.git",
                 ToFetch=new List<string>(){
-                    @"trunk/Rope Swing"
+                    @"trunk\Rope Swing"
                 },
-                Solution=@"trunk/Rope Swing/Rope Swing.sln"},
+                Solution=@"trunk\Rope Swing\Rope Swing.sln"},
 
             new GameRecord(){
                 Author="Antti-Jussi",
                 GameName="?",
                 SVNRepo=@"https://github.com/aj-pelikurssi2014/sejypeli.git",
                 ToFetch=new List<string>(){
-                    @"trunk/Tasohyppelypeli1"
+                    @"trunk\Tasohyppelypeli1"
                 },
-                Solution=@"trunk/Tasohyppelypeli1/Tasohyppelypeli1.sln"},
+                Solution=@"trunk\Tasohyppelypeli1\Tasohyppelypeli1.sln"},
 
             new GameRecord(){
                 Author="Atte",
                 GameName="Crazy Greg",
                 SVNRepo=@"https://github.com/JeesMies00/sejypeli.git",
                 ToFetch=new List<string>(){
-                    @"trunk/GrazyGreg.sln",
-                    @"trunk/GrazyGreg"
+                    @"trunk\GrazyGreg.sln",
+                    @"trunk\GrazyGreg"
                 },
-                Solution=@"trunk/GrazyGreg.sln"},
+                Solution=@"trunk\GrazyGreg.sln"},
 
             new GameRecord(){
                 Author="Dani",
                 GameName="bojoing",
                 SVNRepo=@"https://github.com/daiseri45/sejypeli.git",
                 ToFetch=new List<string>(){
-                    @"trunk/bojoing",
+                    @"trunk\bojoing",
                 },
-                Solution=@"trunk/bojoing/bojoing.sln"},
+                Solution=@"trunk\bojoing\bojoing.sln"},
 
             new GameRecord(){
                 Author="Emil-Aleksi",
                 GameName="Rainbow Fly",
                 SVNRepo=@"https://github.com/EA99/sejypeli.git",
                 ToFetch=new List<string>(){
-                    @"trunk/RainbowFly",
+                    @"trunk\RainbowFly",
                 },
-                Solution=@"trunk/RainbowFly/RainbowFly.sln"},
+                Solution=@"trunk\RainbowFly\RainbowFly.sln"},
 
             new GameRecord(){
                 Author="Jere",
                 GameName="?",
                 SVNRepo=@"https://github.com/jerekop/sejypeli.git",
                 ToFetch=new List<string>(){
-                    @"trunk/FysiikkaPeli1",
-                    @"trunk/FysiikkaPeli1.sln",
+                    @"trunk\FysiikkaPeli1",
+                    @"trunk\FysiikkaPeli1.sln",
                 },
-                Solution=@"trunk/FysiikkaPeli1.sln"},
+                Solution=@"trunk\FysiikkaPeli1.sln"},
 
             new GameRecord(){
                 Author="Joel",
                 GameName="Urhea Sotilas",
                 SVNRepo=@"https://github.com/JopezSuomi/sejypeli.git",
                 ToFetch=new List<string>(){
-                    @"trunk/UrheaSotilas",
+                    @"trunk\UrheaSotilas",
                 },
-                Solution=@"trunk/UrheaSotilas/UrheaSotilas.sln"},
+                Solution=@"trunk\UrheaSotilas\UrheaSotilas.sln"},
 
             new GameRecord(){
                 Author="JoonaK",
                 GameName="_insert name here_",
                 SVNRepo=@"https://github.com/kytari/sejypeli.git",
                 ToFetch=new List<string>(){
-                    @"trunk/_Insert name here_",
-                    @"trunk/_Insert name here_.sln",
+                    @"trunk\_Insert name here_",
+                    @"trunk\_Insert name here_.sln",
                 },
-                Solution=@"trunk/_Insert name here_.sln"},
+                Solution=@"trunk\_Insert name here_.sln"},
 
 
             new GameRecord(){
@@ -318,9 +330,9 @@ public class TarkistaOppilaidenPelit : Game
                 GameName="Flappy derp",
                 SVNRepo=@"https://github.com/EXIBEL/sejypeli.git",
                 ToFetch=new List<string>(){
-                    @"trunk/Falppy derp Saku",
+                    @"trunk\Falppy derp Saku",
                 },
-                Solution=@"trunk/Falppy derp Saku/Falppy derp Saku.sln"},
+                Solution=@"trunk\Falppy derp Saku\Falppy derp Saku.sln"},
         };
     }
 }
