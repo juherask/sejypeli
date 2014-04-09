@@ -30,11 +30,13 @@ public class TarkistaOppilaidenPelit : Game
 {
     string SVN_CLI_EXE = @"C:\Program Files\TortoiseSVN\bin\svn.exe";
     string MSBUILD_EXE = @"C:\Program Files (x86)\MSBuild\12.0\Bin\MsBuild.exe";
-    double TASK_COMPLETION_POLL_INTERVAL = 1.0;
+    double TASK_COMPLETION_POLL_INTERVAL = 2.0;
+    double PROCESS_CHECK_INTERVAL = 3.0;
 
     Queue<Tuple<GameRecord, Task, string>> taskQueue; // string is free paramter used when processing updates
     List<GameRecord> listOfGames;
     Process activeCliProcess;
+    bool processing = false;
 
     enum Task
     {
@@ -68,11 +70,18 @@ public class TarkistaOppilaidenPelit : Game
             taskQueue.Enqueue( new Tuple<GameRecord, Task, string>(record, Task.Checkout, "") );
         }
 
-        Timer.SingleShot(1.0, ProcessTaskList);
+        Timer processTimer = new Timer();
+        processTimer.Interval = PROCESS_CHECK_INTERVAL;
+        processTimer.Timeout += ProcessTaskList;
+        processTimer.Start();
     }
 
     void ProcessTaskList()
     {
+        if (processing)
+            return;
+
+        processing = true;
         var task = taskQueue.Dequeue();
         switch (task.Item2)
         {   
@@ -99,14 +108,14 @@ public class TarkistaOppilaidenPelit : Game
         if (Directory.Exists(record.Author))
         {
             taskQueue.Enqueue(new Tuple<GameRecord, Task, string>(record, Task.UpdateListed, ""));
-            Timer.SingleShot(1.0, ProcessTaskList);
+            processing = false;
         }
         else
         {
             Directory.CreateDirectory(record.Author);
             Task currentTask = Task.Checkout;
             Task nextTask = Task.UpdateListed;
-            string command = String.Format("/C \"{0}\" co {1} \"{2}\" --depth empty", SVN_CLI_EXE, record.SVNRepo, Path.Combine(Directory.GetCurrentDirectory(), record.Author));
+            string command = String.Format("\"{0}\" co {1} \"{2}\" --depth empty", SVN_CLI_EXE, record.SVNRepo, Path.Combine(Directory.GetCurrentDirectory(), record.Author));
             GenericProcessor(record, currentTask, nextTask, command);
         }
     }
@@ -121,8 +130,8 @@ public class TarkistaOppilaidenPelit : Game
             foreach (var toUpdate in record.ToFetch)
             {
                 taskQueue.Enqueue(new Tuple<GameRecord, Task, string>(record, Task.UpdateListed, toUpdate));
-                Timer.SingleShot(1.0, ProcessTaskList);
             }
+            processing = false;
         }
         else
         {
@@ -135,7 +144,7 @@ public class TarkistaOppilaidenPelit : Game
                 nextTask = Task.Compile;
                 addRetry = true;    
             }
-            string command = String.Format("/C \"{0}\" up \"{1}\"", SVN_CLI_EXE, Path.Combine(Directory.GetCurrentDirectory(), record.Author, fetch));
+            string command = String.Format("\"{0}\" up \"{1}\"", SVN_CLI_EXE, Path.Combine(Directory.GetCurrentDirectory(), record.Author, fetch));
             GenericProcessor(record, currentTask, nextTask, command, addRetry);
         }
     }
@@ -144,7 +153,7 @@ public class TarkistaOppilaidenPelit : Game
     {
         Task currentTask = Task.Compile;
         Task nextTask = Task.RunGame;
-        string command = String.Format("/C \"{0}\" /nologo \"{1}\"", MSBUILD_EXE, record.Solution);
+        string command = String.Format("\"{0}\" /nologo \"{1}\"", MSBUILD_EXE, record.Solution);
         GenericProcessor(record, currentTask, nextTask, command);
     }
 
@@ -157,12 +166,13 @@ public class TarkistaOppilaidenPelit : Game
             if (gameExeName == "")
                 gameExeName = file;
             else
+                processing = false;
                 throw new IOException("Multiple exe files for the game");
         }
 
         Task currentTask = Task.RunGame;
         Task nextTask = Task.UpdateListed;
-        string command = String.Format("/C \"{0}\"", gameExeName);
+        string command = String.Format("\"{0}\"", gameExeName);
         GenericProcessor(record, currentTask, nextTask, command);
     }
 
@@ -170,13 +180,25 @@ public class TarkistaOppilaidenPelit : Game
     {
         if (activeCliProcess == null)
         {
+            // split
+            string exepart = command.Substring(0, command.IndexOf(".exe\"")+5);
+            string argpart = command.Substring(command.IndexOf(".exe\"")+5);
+
             activeCliProcess = new Process();
             ProcessStartInfo startInfo = new ProcessStartInfo();
             startInfo.WindowStyle = ProcessWindowStyle.Hidden;
+
+            startInfo.FileName = exepart;
+            startInfo.Arguments = argpart;
+
+            /*
             startInfo.FileName = "cmd.exe";
-            /*startInfo.UseShellExecute = false;
+            startInfo.Arguments = "/C "+command;
+            */
+
+            startInfo.UseShellExecute = false;
             startInfo.RedirectStandardError = true;
-            startInfo.RedirectStandardOutput = true;*/
+            startInfo.RedirectStandardOutput = true;
 
             startInfo.Arguments = command;
             activeCliProcess.StartInfo = startInfo;
@@ -227,7 +249,7 @@ public class TarkistaOppilaidenPelit : Game
                         taskQueue.Enqueue(new Tuple<GameRecord, Task, string>(record, currentTask, ""));
                 }
                 activeCliProcess = null;
-                Timer.SingleShot(1.0, ProcessTaskList);
+                processing = false;
             }
         }
     }
