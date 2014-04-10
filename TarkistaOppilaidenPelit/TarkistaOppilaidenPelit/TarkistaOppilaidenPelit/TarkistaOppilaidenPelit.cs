@@ -8,6 +8,7 @@ using Jypeli.Widgets;
 using System.Linq;
 using System.IO;
 using System.Diagnostics;
+using System.Threading;
 
 // Oppilas, PelinNimi, Repo, Lista checkoutattavista tiedostoista/kansioista, Solutiontiedosto
 class GameRecord 
@@ -30,13 +31,21 @@ public class TarkistaOppilaidenPelit : Game
 {
     string SVN_CLI_EXE = @"C:\Program Files\TortoiseSVN\bin\svn.exe";
     string MSBUILD_EXE = @"C:\Program Files (x86)\MSBuild\12.0\Bin\MsBuild.exe";
-    double TASK_COMPLETION_POLL_INTERVAL = 2.0;
-    double PROCESS_CHECK_INTERVAL = 3.0;
+    //double TASK_COMPLETION_POLL_INTERVAL = 2.0;
+    double PROCESS_CHECK_INTERVAL = 1.0;
+    int MAX_GAME_RUN_TIME = 3000;
 
     Queue<Tuple<GameRecord, Task, string>> taskQueue; // string is free paramter used when processing updates
     List<GameRecord> listOfGames;
     Process activeCliProcess;
     bool processing = false;
+
+    Mutex stateQueueMutex = new Mutex();
+    Queue<string> messageQueue = new Queue<string>();
+    Queue<Tuple<GameRecord, Task, Status>> stateQueue = new Queue<Tuple<GameRecord, Task, Status>>();
+
+
+    Thread processingThread;
 
     enum Task
     {
@@ -46,6 +55,21 @@ public class TarkistaOppilaidenPelit : Game
         RunGame,
         None
     }
+
+    enum Status
+    {
+        Wait,
+        OK,
+        Fail,
+    }
+
+    Dictionary<Task, string> taskToLabel = new Dictionary<Task, string>()
+    {
+        {Task.Checkout, "Nouto"},
+        {Task.UpdateListed, "Update"},
+        {Task.Compile, "Kääntäminen"},
+        {Task.RunGame, "Pelin ajo"},
+    };
    
     
 
@@ -54,6 +78,7 @@ public class TarkistaOppilaidenPelit : Game
         SetWindowSize(800, 600);
         IsMouseVisible = true;
         // Kirjoita ohjelmakoodisi tähän
+
 
         PhoneBackButton.Listen(ConfirmExit, "Lopeta peli");
         Keyboard.Listen(Key.Escape, ButtonState.Pressed, ConfirmExit, "Lopeta peli");
@@ -64,41 +89,137 @@ public class TarkistaOppilaidenPelit : Game
         if (listOfGames.Count != authors.Count)
             throw new ArgumentException("Tekijöiden pitää olla yksilöllisiä");
 
+        
         taskQueue = new Queue<Tuple<GameRecord, Task, string>>();
-        foreach (var record in listOfGames)
+        for (int i = 0; i < listOfGames.Count; i++)
         {
+            var record = listOfGames[i];
+
+            var indicator = new GameObject(40, 40);
+            indicator.Color = Color.Gray;
+            indicator.Tag = record.Author + "_indicator";
+            indicator.X = Screen.Left+50 + ((Screen.Right-Screen.Left-100)/listOfGames.Count)*i;
+            Add(indicator);
+
+            var nameLabel = new Label(80, 40);
+            nameLabel.Font = Font.DefaultLargeBold;
+            nameLabel.Text = record.Author;
+            nameLabel.Position = new Vector(indicator.X, 70);
+            Add(nameLabel);
+
+            var statusLabel = new Label(80, 40);
+            nameLabel.Font = Font.DefaultLargeBold;
+            nameLabel.Tag = record.Author + "_status";
+            nameLabel.Text = "odota";
+            nameLabel.Position = new Vector(indicator.X, -70);
+            Add(nameLabel);
+
             taskQueue.Enqueue( new Tuple<GameRecord, Task, string>(record, Task.Checkout, "") );
         }
 
-        Timer processTimer = new Timer();
+        /*Jypeli.Timer processTimer = new Jypeli.Timer();
         processTimer.Interval = PROCESS_CHECK_INTERVAL;
         processTimer.Timeout += ProcessTaskList;
         processTimer.Start();
+         */
+
+        ThreadedTaskListProcessor();
+    }
+
+    protected override void Update(Time time)
+    {
+        base.Update(time);
+        var hasOne = stateQueueMutex.WaitOne(10);
+        if (hasOne)
+        {
+            while (messageQueue.Count > 0)
+            {
+                string message = messageQueue.Dequeue();
+                MessageDisplay.Add(message);
+            }
+
+            while (stateQueue.Count > 0)
+            {
+                var stateChange = stateQueue.Dequeue();
+                var author = stateChange.Item1.Author;
+
+                var indicator = GetObjectsWithTag(author + "_indicator").First();
+                var label = GetObjectsWithTag(author + "_status").First() as Label;
+                label.Text = taskToLabel[stateChange.Item2];
+
+                switch (stateChange.Item3)
+                {
+                    case Status.Wait:
+                        indicator.Color = Color.Gray;        
+                        break;
+                    case Status.OK:
+                        indicator.Color = Color.GreenYellow;
+                        break;
+                    case Status.Fail:
+                        indicator.Color = Color.Red;
+                        break;
+                    default:
+                        break;
+                }
+            }
+            stateQueueMutex.ReleaseMutex();
+        }
+    }
+
+    private void ThreadedTaskListProcessor()
+    {
+        processing = false;
+        processingThread = new Thread(new ThreadStart(ProcessTaskList));
+
+        // Start the thread
+        processingThread.Start();
+
+        // Spin for a while waiting for the started thread to become
+        // alive:
+        while (!processingThread.IsAlive) ;
     }
 
     void ProcessTaskList()
     {
-        if (processing)
-            return;
+        while (true)
+        {
+            if (!processing)
+                System.Threading.Thread.Sleep( (int)(PROCESS_CHECK_INTERVAL*1000) );
 
-        processing = true;
-        var task = taskQueue.Dequeue();
-        switch (task.Item2)
-        {   
-            case Task.Checkout:
-                ProcessCheckoutRepo(task.Item1);
+            if (taskQueue.Count == 0)
                 break;
-            case Task.UpdateListed:
-                ProcessUpdateListed(task.Item1, task.Item3);
-                break;
-            case Task.Compile:
-                ProcessCompile(task.Item1);
-                break;
-            case Task.RunGame:
-                ProcessRunGame(task.Item1);
-                break;
-            default:
-                break;
+
+            var task = taskQueue.Dequeue();
+            switch (task.Item2)
+            {   
+                case Task.Checkout:
+                    stateQueueMutex.WaitOne();
+                    messageQueue.Enqueue("Checking out for " + task.Item1.Author);
+                    stateQueueMutex.ReleaseMutex();
+                    ProcessCheckoutRepo(task.Item1);
+                    break;
+                case Task.UpdateListed:
+                    stateQueueMutex.WaitOne();
+                    messageQueue.Enqueue("Updating files from " + task.Item1.Author);
+                    stateQueueMutex.ReleaseMutex();
+                    ProcessUpdateListed(task.Item1, task.Item3);
+                    break;
+                case Task.Compile:
+                    stateQueueMutex.WaitOne();
+                    messageQueue.Enqueue("Compiling project of " + task.Item1.Author);
+                    stateQueueMutex.ReleaseMutex();
+                    ProcessCompile(task.Item1);
+                    break;
+                case Task.RunGame:
+                    stateQueueMutex.WaitOne();
+                    messageQueue.Enqueue("Running game of " + task.Item1.Author);
+                    stateQueueMutex.ReleaseMutex();
+                    ProcessRunGame(task.Item1);
+                    break;
+                default:
+                    break;
+            }
+            processing = false;
         }
     }
 
@@ -108,7 +229,6 @@ public class TarkistaOppilaidenPelit : Game
         if (Directory.Exists(record.Author))
         {
             taskQueue.Enqueue(new Tuple<GameRecord, Task, string>(record, Task.UpdateListed, ""));
-            processing = false;
         }
         else
         {
@@ -116,6 +236,7 @@ public class TarkistaOppilaidenPelit : Game
             Task currentTask = Task.Checkout;
             Task nextTask = Task.UpdateListed;
             string command = String.Format("\"{0}\" co {1} \"{2}\" --depth empty", SVN_CLI_EXE, record.SVNRepo, Path.Combine(Directory.GetCurrentDirectory(), record.Author));
+
             GenericProcessor(record, currentTask, nextTask, command);
         }
     }
@@ -131,7 +252,6 @@ public class TarkistaOppilaidenPelit : Game
             {
                 taskQueue.Enqueue(new Tuple<GameRecord, Task, string>(record, Task.UpdateListed, toUpdate));
             }
-            processing = false;
         }
         else
         {
@@ -145,7 +265,7 @@ public class TarkistaOppilaidenPelit : Game
                 addRetry = true;    
             }
             string command = String.Format("\"{0}\" up \"{1}\"", SVN_CLI_EXE, Path.Combine(Directory.GetCurrentDirectory(), record.Author, fetch));
-            GenericProcessor(record, currentTask, nextTask, command, addRetry);
+            GenericProcessor(record, currentTask, nextTask, command, -1, addRetry);
         }
     }
 
@@ -153,7 +273,7 @@ public class TarkistaOppilaidenPelit : Game
     {
         Task currentTask = Task.Compile;
         Task nextTask = Task.RunGame;
-        string command = String.Format("\"{0}\" /nologo \"{1}\"", MSBUILD_EXE, record.Solution);
+        string command = String.Format("\"{0}\" /nologo /noconlog \"{1}\"", MSBUILD_EXE, Path.Combine(Directory.GetCurrentDirectory(), record.Author, record.Solution));
         GenericProcessor(record, currentTask, nextTask, command);
     }
 
@@ -164,22 +284,34 @@ public class TarkistaOppilaidenPelit : Game
             record.Author, "*.exe", SearchOption.AllDirectories))
         {
             if (gameExeName == "")
+            {
                 gameExeName = file;
+            }
             else
-                processing = false;
-                throw new IOException("Multiple exe files for the game");
+            {
+                stateQueueMutex.WaitOne();
+                messageQueue.Enqueue("Multiple game exes for the game, using " + gameExeName);
+                stateQueueMutex.ReleaseMutex();
+                break;
+            }
         }
 
         Task currentTask = Task.RunGame;
         Task nextTask = Task.UpdateListed;
         string command = String.Format("\"{0}\"", gameExeName);
-        GenericProcessor(record, currentTask, nextTask, command);
+        GenericProcessor(record, currentTask, nextTask, command, MAX_GAME_RUN_TIME);
     }
 
-    private void GenericProcessor(GameRecord record, Task currentTask, Task nextTask, string command, bool addRetry = true)
+    
+
+    private void GenericProcessor(GameRecord record, Task currentTask, Task nextTask, string command, int runTimeout=-1, bool addRetry = true)
     {
         if (activeCliProcess == null)
         {
+            stateQueueMutex.WaitOne();
+            stateQueue.Enqueue(new Tuple<GameRecord, Task, Status>(record, currentTask, Status.Fail));
+            stateQueueMutex.ReleaseMutex();
+
             // split
             string exepart = command.Substring(0, command.IndexOf(".exe\"")+5);
             string argpart = command.Substring(command.IndexOf(".exe\"")+5);
@@ -196,62 +328,92 @@ public class TarkistaOppilaidenPelit : Game
             startInfo.Arguments = "/C "+command;
             */
 
+            startInfo.CreateNoWindow = true;
             startInfo.UseShellExecute = false;
             startInfo.RedirectStandardError = true;
             startInfo.RedirectStandardOutput = true;
 
-            startInfo.Arguments = command;
             activeCliProcess.StartInfo = startInfo;
             activeCliProcess.Start();
 
-            MessageDisplay.Add("Running command " + command);
+            //messageQueueMutex.WaitOne();
+            //messageQueue.Enqueue("Running command " + command);
+            //messageQueueMutex.ReleaseMutex();
 
-            Action retry = () => GenericProcessor(record, currentTask, nextTask, command);
-            Timer.SingleShot(TASK_COMPLETION_POLL_INTERVAL, retry);
-        }
-        else
-        {
-            if (!activeCliProcess.HasExited)
+            if (runTimeout == -1)
+                activeCliProcess.WaitForExit();
+            else
             {
-                Action retry = () => GenericProcessor(record, currentTask, nextTask, command);
-                Timer.SingleShot(TASK_COMPLETION_POLL_INTERVAL, retry);
+                activeCliProcess.WaitForExit(runTimeout);
+            }
+        }
+        if (activeCliProcess.HasExited)
+        {
+
+            // THIS is probably CMD.exe exitcode
+            if (activeCliProcess.ExitCode == 0)
+            {
+                stateQueueMutex.WaitOne();
+                messageQueue.Enqueue("Process exited with CODE 0. Output:");
+
+                StreamReader sr = activeCliProcess.StandardOutput;
+                while (!sr.EndOfStream)
+                {
+                    String s = sr.ReadLine();
+                    if (s != "")
+                        messageQueue.Enqueue(s);
+                }
+
+                stateQueue.Enqueue(new Tuple<GameRecord, Task, Status>(record, currentTask, Status.OK));
+
+                stateQueueMutex.ReleaseMutex();
+
+
+                // TODO: Check if it was successfull, //  update light bulb state and 
+                if (nextTask != Task.None)
+                    taskQueue.Enqueue(new Tuple<GameRecord, Task, string>(record, nextTask, ""));
             }
             else
             {
-                // THIS is probably CMD.exe exitcode
-                if (activeCliProcess.ExitCode==0)
-                {
-                    MessageDisplay.Add("Process exited with CODE 0. Output:");
-                    StreamReader sr = activeCliProcess.StandardOutput;
-                    while (!sr.EndOfStream)
-                    {
-                        String s = sr.ReadLine();
-                        if (s != "")
-                            MessageDisplay.Add(s);
-                    }
+                stateQueueMutex.WaitOne();
+                messageQueue.Enqueue("Process exited with CODE 1. Output:");
 
-                    // TODO: Check if it was successfull, //  update light bulb state and 
-                    if (nextTask!=Task.None)
-                        taskQueue.Enqueue(new Tuple<GameRecord, Task, string>(record, nextTask, ""));
-                }
-                else
+                StreamReader sro = activeCliProcess.StandardOutput;
+                while (!sro.EndOfStream)
                 {
-                    MessageDisplay.Add("Process exited with CODE 1. Output:");
-                    StreamReader sr = activeCliProcess.StandardError;
-                    while (!sr.EndOfStream)
-                    {
-                        String s = sr.ReadLine();
-                        if (s != "")
-                            MessageDisplay.Add(s);
-                    }
-
-                    if (addRetry)
-                        taskQueue.Enqueue(new Tuple<GameRecord, Task, string>(record, currentTask, ""));
+                    String s = sro.ReadLine();
+                    if (s != "")
+                        messageQueue.Enqueue(s);
                 }
-                activeCliProcess = null;
-                processing = false;
+                StreamReader sre = activeCliProcess.StandardError;
+                while (!sre.EndOfStream)
+                {
+                    String s = sre.ReadLine();
+                    if (s != "")
+                        messageQueue.Enqueue(s);
+                }
+
+                stateQueue.Enqueue(new Tuple<GameRecord, Task, Status>(record, currentTask, Status.Fail));
+
+                stateQueueMutex.ReleaseMutex();
+
+                if (addRetry)
+                    taskQueue.Enqueue(new Tuple<GameRecord, Task, string>(record, currentTask, ""));
             }
         }
+        else
+        {
+            activeCliProcess.Kill();
+            stateQueueMutex.WaitOne();
+            messageQueue.Enqueue("Process killed");
+            stateQueue.Enqueue(new Tuple<GameRecord, Task, Status>(record, currentTask, Status.OK));
+            stateQueueMutex.ReleaseMutex();
+
+            // TODO: Check if it was successfull, //  update light bulb state and 
+            if (nextTask != Task.None)
+                taskQueue.Enqueue(new Tuple<GameRecord, Task, string>(record, nextTask, ""));
+        }
+        activeCliProcess = null;
     }
 
     List<GameRecord> GetHardCodedList()
@@ -260,12 +422,12 @@ public class TarkistaOppilaidenPelit : Game
             new GameRecord(){
                 Author="Atte",
                 GameName="Crazy Greg",
-                SVNRepo=@"https://github.com/JeesMies00/sejypeli.git",
+                SVNRepo=@"https://github.com/JeesMies00/sejypeli.git/trunk",
                 ToFetch=new List<string>(){
-                    @"trunk\GrazyGreg.sln",
-                    @"trunk\GrazyGreg"
+                    @"GrazyGreg.sln",
+                    @"GrazyGreg"
                 },
-                Solution=@"trunk\GrazyGreg.sln"},
+                Solution=@"GrazyGreg.sln"},
         };
 
         // Jos monta oppilasta tekee samaa peliä, käytä nimenä molempia "Jaakko&Jussi"
