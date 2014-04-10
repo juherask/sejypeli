@@ -9,6 +9,7 @@ using System.Linq;
 using System.IO;
 using System.Diagnostics;
 using System.Threading;
+using System.Runtime.InteropServices;
 
 // Oppilas, PelinNimi, Repo, Lista checkoutattavista tiedostoista/kansioista, Solutiontiedosto
 class GameRecord 
@@ -20,6 +21,11 @@ class GameRecord
   public string Solution;
 }
 
+class User32
+{
+    [DllImport("user32.dll")]
+    public static extern void SetWindowPos(uint Hwnd, int Level, int X, int Y, int W, int H, uint Flags);
+}
 
 /*
 * For checking out we use
@@ -29,8 +35,8 @@ class GameRecord
 */
 public class TarkistaOppilaidenPelit : Game
 {
-    string SVN_CLI_EXE = @"C:\Program Files\TortoiseSVN\bin\svn.exe";
-    string MSBUILD_EXE = @"C:\Program Files (x86)\MSBuild\12.0\Bin\MsBuild.exe";
+    string SVN_CLI_EXE = @"C:\Users\opetus01\Downloads\svn-win32-1.8.8\svn-win32-1.8.8\bin\svn.exe";
+    string MSBUILD_EXE = @"C:\Windows\Microsoft.NET\Framework\v4.0.30319\MsBuild.exe";
     //double TASK_COMPLETION_POLL_INTERVAL = 2.0;
     double PROCESS_CHECK_INTERVAL = 1.0;
     int MAX_GAME_RUN_TIME = 3000;
@@ -39,6 +45,7 @@ public class TarkistaOppilaidenPelit : Game
     List<GameRecord> listOfGames;
     Process activeCliProcess;
     bool processing = false;
+    bool paused = false;
 
     Mutex stateQueueMutex = new Mutex();
     Queue<string> messageQueue = new Queue<string>();
@@ -75,15 +82,20 @@ public class TarkistaOppilaidenPelit : Game
 
     public override void Begin()
     {
-        SetWindowSize(800, 600);
+        User32.SetWindowPos((uint)this.Window.Handle, -1, 0, 0,1024, 768, 0);
+
+        //SetWindowSize(800, 600);
         IsMouseVisible = true;
         // Kirjoita ohjelmakoodisi tähän
 
 
         PhoneBackButton.Listen(ConfirmExit, "Lopeta peli");
         Keyboard.Listen(Key.Escape, ButtonState.Pressed, ConfirmExit, "Lopeta peli");
+        Keyboard.Listen(Key.P, ButtonState.Pressed, PauseProcess, "Pistä tauolle");
 
         listOfGames = GetHardCodedList();
+        //listOfGames = GetHardCodedListJust1();
+
         List<string> authors = listOfGames.Select(ot => ot.Author).Distinct().ToList();
 
         if (listOfGames.Count != authors.Count)
@@ -95,24 +107,24 @@ public class TarkistaOppilaidenPelit : Game
         {
             var record = listOfGames[i];
 
-            var indicator = new GameObject(40, 40);
+            var indicator = new GameObject(40, 40, Shape.Circle);
             indicator.Color = Color.Gray;
             indicator.Tag = record.Author + "_indicator";
-            indicator.X = Screen.Left+50 + ((Screen.Right-Screen.Left-100)/listOfGames.Count)*i;
+            indicator.X = Screen.Left+100 + ((Screen.Right-Screen.Left-100)/listOfGames.Count)*i;
             Add(indicator);
 
-            var nameLabel = new Label(80, 40);
-            nameLabel.Font = Font.DefaultLargeBold;
+            var nameLabel = new Label(120, 40);
+            //nameLabel.Font = Font.DefaultLargeBold;
             nameLabel.Text = record.Author;
             nameLabel.Position = new Vector(indicator.X, 70);
             Add(nameLabel);
 
-            var statusLabel = new Label(80, 40);
-            nameLabel.Font = Font.DefaultLargeBold;
-            nameLabel.Tag = record.Author + "_status";
-            nameLabel.Text = "odota";
-            nameLabel.Position = new Vector(indicator.X, -70);
-            Add(nameLabel);
+            var statusLabel = new Label(120, 40);
+            //nameLabel.Font = Font.DefaultLargeBold;
+            statusLabel.Tag = record.Author + "_status";
+            statusLabel.Text = "odota";
+            statusLabel.Position = new Vector(indicator.X, -70);
+            Add(statusLabel);
 
             taskQueue.Enqueue( new Tuple<GameRecord, Task, string>(record, Task.Checkout, "") );
         }
@@ -124,6 +136,11 @@ public class TarkistaOppilaidenPelit : Game
          */
 
         ThreadedTaskListProcessor();
+    }
+
+    void PauseProcess()
+    {
+        paused = !paused;
     }
 
     protected override void Update(Time time)
@@ -153,7 +170,10 @@ public class TarkistaOppilaidenPelit : Game
                         indicator.Color = Color.Gray;        
                         break;
                     case Status.OK:
-                        indicator.Color = Color.GreenYellow;
+                        if (stateChange.Item2==Task.RunGame)
+                            indicator.Color = Color.Green;
+                        else
+                            indicator.Color = Color.Yellow;
                         break;
                     case Status.Fail:
                         indicator.Color = Color.Red;
@@ -185,6 +205,9 @@ public class TarkistaOppilaidenPelit : Game
         {
             if (!processing)
                 System.Threading.Thread.Sleep( (int)(PROCESS_CHECK_INTERVAL*1000) );
+
+            while (paused)
+                System.Threading.Thread.Sleep((int)(PROCESS_CHECK_INTERVAL * 1000));
 
             if (taskQueue.Count == 0)
                 break;
@@ -309,7 +332,7 @@ public class TarkistaOppilaidenPelit : Game
         if (activeCliProcess == null)
         {
             stateQueueMutex.WaitOne();
-            stateQueue.Enqueue(new Tuple<GameRecord, Task, Status>(record, currentTask, Status.Fail));
+            stateQueue.Enqueue(new Tuple<GameRecord, Task, Status>(record, currentTask, Status.Wait));
             stateQueueMutex.ReleaseMutex();
 
             // split
@@ -361,7 +384,10 @@ public class TarkistaOppilaidenPelit : Game
                 {
                     String s = sr.ReadLine();
                     if (s != "")
-                        messageQueue.Enqueue(s);
+                    {
+                        Trace.WriteLine(s);
+                        //messageQueue.Enqueue(s);
+                    }
                 }
 
                 stateQueue.Enqueue(new Tuple<GameRecord, Task, Status>(record, currentTask, Status.OK));
@@ -378,19 +404,26 @@ public class TarkistaOppilaidenPelit : Game
                 stateQueueMutex.WaitOne();
                 messageQueue.Enqueue("Process exited with CODE 1. Output:");
 
+                
                 StreamReader sro = activeCliProcess.StandardOutput;
                 while (!sro.EndOfStream)
                 {
                     String s = sro.ReadLine();
                     if (s != "")
-                        messageQueue.Enqueue(s);
+                    {
+                        Trace.WriteLine(s);
+                        //messageQueue.Enqueue(s);
+                    }
                 }
                 StreamReader sre = activeCliProcess.StandardError;
                 while (!sre.EndOfStream)
                 {
                     String s = sre.ReadLine();
                     if (s != "")
-                        messageQueue.Enqueue(s);
+                    {
+                        Trace.WriteLine(s);
+                        //messageQueue.Enqueue(s);
+                    }
                 }
 
                 stateQueue.Enqueue(new Tuple<GameRecord, Task, Status>(record, currentTask, Status.Fail));
@@ -416,9 +449,44 @@ public class TarkistaOppilaidenPelit : Game
         activeCliProcess = null;
     }
 
+    List<GameRecord> GetHardCodedListJust1()
+    {
+        // Jos monta oppilasta tekee samaa peliä, käytä nimenä molempia "Jaakko&Jussi"
+        //  Ei välejä
+        return new List<GameRecord>(){
+            new GameRecord(){
+                Author="Alex&JoonaR",
+                GameName="Zombie Swing",
+                SVNRepo="https://github.com/magishark/sejypeli.git/trunk",
+                ToFetch=new List<string>(){
+                    @"Rope Swing"
+                },
+                Solution=@"Rope Swing\Rope Swing.sln"},};
+    }
+
     List<GameRecord> GetHardCodedList()
     {
+        // Jos monta oppilasta tekee samaa peliä, käytä nimenä molempia "Jaakko&Jussi"
+        //  Ei välejä
         return new List<GameRecord>(){
+            new GameRecord(){
+                Author="Alex&JoonaR",
+                GameName="Zombie Swing",
+                SVNRepo="https://github.com/magishark/sejypeli.git/trunk",
+                ToFetch=new List<string>(){
+                    @"Rope Swing"
+                },
+                Solution=@"Rope Swing\Rope Swing.sln"},
+
+            /*new GameRecord(){
+                Author="Antti-Jussi",
+                GameName="?",
+                SVNRepo=@"https://github.com/aj-pelikurssi2014/sejypeli.git/trunk",
+                ToFetch=new List<string>(){
+                    @"Tasohyppelypeli1"
+                },
+                Solution=@"Tasohyppelypeli1\Tasohyppelypeli1.sln"},*/
+
             new GameRecord(){
                 Author="Atte",
                 GameName="Crazy Greg",
@@ -428,95 +496,63 @@ public class TarkistaOppilaidenPelit : Game
                     @"GrazyGreg"
                 },
                 Solution=@"GrazyGreg.sln"},
-        };
-
-        // Jos monta oppilasta tekee samaa peliä, käytä nimenä molempia "Jaakko&Jussi"
-        //  Ei välejä
-        return new List<GameRecord>(){
-            new GameRecord(){
-                Author="Alex&JoonaR",
-                GameName="Zombie Swing",
-                SVNRepo="https://github.com/magishark/sejypeli.git",
-                ToFetch=new List<string>(){
-                    @"trunk\Rope Swing"
-                },
-                Solution=@"trunk\Rope Swing\Rope Swing.sln"},
-
-            new GameRecord(){
-                Author="Antti-Jussi",
-                GameName="?",
-                SVNRepo=@"https://github.com/aj-pelikurssi2014/sejypeli.git",
-                ToFetch=new List<string>(){
-                    @"trunk\Tasohyppelypeli1"
-                },
-                Solution=@"trunk\Tasohyppelypeli1\Tasohyppelypeli1.sln"},
-
-            new GameRecord(){
-                Author="Atte",
-                GameName="Crazy Greg",
-                SVNRepo=@"https://github.com/JeesMies00/sejypeli.git",
-                ToFetch=new List<string>(){
-                    @"trunk\GrazyGreg.sln",
-                    @"trunk\GrazyGreg"
-                },
-                Solution=@"trunk\GrazyGreg.sln"},
 
             new GameRecord(){
                 Author="Dani",
                 GameName="bojoing",
-                SVNRepo=@"https://github.com/daiseri45/sejypeli.git",
+                SVNRepo=@"https://github.com/daiseri45/sejypeli.git/trunk",
                 ToFetch=new List<string>(){
-                    @"trunk\bojoing",
+                    @"bojoing",
                 },
-                Solution=@"trunk\bojoing\bojoing.sln"},
+                Solution=@"bojoing\bojoing.sln"},
 
             new GameRecord(){
                 Author="Emil-Aleksi",
                 GameName="Rainbow Fly",
-                SVNRepo=@"https://github.com/EA99/sejypeli.git",
+                SVNRepo=@"https://github.com/EA99/sejypeli.git/trunk",
                 ToFetch=new List<string>(){
-                    @"trunk\RainbowFly",
+                    @"RainbowFly",
                 },
-                Solution=@"trunk\RainbowFly\RainbowFly.sln"},
+                Solution=@"RainbowFly\RainbowFly.sln"},
 
             new GameRecord(){
                 Author="Jere",
-                GameName="?",
-                SVNRepo=@"https://github.com/jerekop/sejypeli.git",
+                GameName="Suklaakakku",
+                SVNRepo=@"https://github.com/jerekop/sejypeli.git/trunk",
                 ToFetch=new List<string>(){
-                    @"trunk\FysiikkaPeli1",
-                    @"trunk\FysiikkaPeli1.sln",
+                    @"FysiikkaPeli1",
+                    @"FysiikkaPeli1.sln",
                 },
-                Solution=@"trunk\FysiikkaPeli1.sln"},
+                Solution=@"FysiikkaPeli1.sln"},
 
             new GameRecord(){
                 Author="Joel",
                 GameName="Urhea Sotilas",
-                SVNRepo=@"https://github.com/JopezSuomi/sejypeli.git",
+                SVNRepo=@"https://github.com/JopezSuomi/sejypeli.git/trunk",
                 ToFetch=new List<string>(){
-                    @"trunk\UrheaSotilas",
+                    @"UrheaSotilas",
                 },
-                Solution=@"trunk\UrheaSotilas\UrheaSotilas.sln"},
+                Solution=@"UrheaSotilas\UrheaSotilas.sln"},
 
             new GameRecord(){
                 Author="JoonaK",
                 GameName="_insert name here_",
-                SVNRepo=@"https://github.com/kytari/sejypeli.git",
+                SVNRepo=@"https://github.com/kytari/sejypeli.git/trunk",
                 ToFetch=new List<string>(){
-                    @"trunk\_Insert name here_",
-                    @"trunk\_Insert name here_.sln",
+                    @"_Insert name here_",
+                    @"_Insert name here_.sln",
                 },
-                Solution=@"trunk\_Insert name here_.sln"},
+                Solution=@"_Insert name here_.sln"},
 
 
             new GameRecord(){
                 Author="Saku&Joeli",
                 GameName="Flappy derp",
-                SVNRepo=@"https://github.com/EXIBEL/sejypeli.git",
+                SVNRepo=@"https://github.com/EXIBEL/sejypeli.git/trunk",
                 ToFetch=new List<string>(){
-                    @"trunk\Falppy derp Saku",
+                    @"Falppy derp Saku",
                 },
-                Solution=@"trunk\Falppy derp Saku\Falppy derp Saku.sln"},
+                Solution=@"Falppy derp Saku\Falppy derp Saku.sln"},
         };
     }
 }
