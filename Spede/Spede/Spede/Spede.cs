@@ -12,9 +12,8 @@ public class Spede : Game
     GameObject vihreaNappi;
 
     // Pelin tila
-    Color syttyneenVari;
+    Color syttyneenAlkuperainenVari;
     GameObject syttynytNappi = null;
-    GameObject painettuNappi = null;
     Timer ajastin = null;
 
     IntMeter pisteet;
@@ -25,12 +24,6 @@ public class Spede : Game
         nappi.Color = vari;
         nappi.X = x;
         Add(nappi);
-
-        GameObject reuna = new GameObject(200, 200, Shape.Circle);
-        reuna.Color = Color.Darker(vari, 100);
-        reuna.X = x;
-        reuna.Y = -20;
-        Add(reuna, -1);
 
         return nappi;
     }
@@ -47,7 +40,7 @@ public class Spede : Game
         ajastin.Timeout += SytytaSatunnainenNappi;
         ajastin.Start();
 
-        // Laskuri
+        // Laskuri (lisätään lopuksi jos aikaa eikä oppilaat ole rättiväsyneitä)
         pisteet = new IntMeter(0);
         Label pisteNaytto = new Label();
         pisteNaytto.BindTo(pisteet);
@@ -58,7 +51,6 @@ public class Spede : Game
         PhoneBackButton.Listen(ConfirmExit, "Lopeta peli");
         Keyboard.Listen(Key.Escape, ButtonState.Pressed, ConfirmExit, "Lopeta peli");
         Mouse.Listen(MouseButton.Left, ButtonState.Pressed, HiirtaNapautettu, "Naksauta hiirellä syttyvää nappia");
-        Mouse.Listen(MouseButton.Left, ButtonState.Released, PalautaYlos, "");
     }
 
     void SytytaSatunnainenNappi()
@@ -88,7 +80,7 @@ public class Spede : Game
                 syttynytNappi = vihreaNappi;
             }
 
-            syttyneenVari = syttynytNappi.Color;
+            syttyneenAlkuperainenVari = syttynytNappi.Color;
             syttynytNappi.Color = Color.Lighter(syttynytNappi.Color, 150);
 
             // 2 s päästä, sytytä toinen nappi.
@@ -107,12 +99,9 @@ public class Spede : Game
 
     void HiirtaNapautettu()
     {
-        GameObject nappi = GetObjectAt(Mouse.PositionOnScreen);
-        if (nappi!=null)
+        GameObject painettuNappi = GetObjectAt(Mouse.PositionOnScreen);
+        if (painettuNappi != null)
         {
-            painettuNappi = nappi;
-            PainaAlas();
-
             if (painettuNappi != syttynytNappi)
             {
                 GameOver();
@@ -125,7 +114,7 @@ public class Spede : Game
             if (syttynytNappi!=null)
             {
                 // Palauta väri
-                syttynytNappi.Color = syttyneenVari;
+                syttynytNappi.Color = syttyneenAlkuperainenVari;
                 syttynytNappi = null;
 
                 ajastin.Reset();
@@ -133,22 +122,5 @@ public class Spede : Game
                 ajastin.Start();
             }
         }
-    }
-
-    void PainaAlas()
-    {
-        if (painettuNappi != null)
-        {
-            painettuNappi.Y -= 15;
-        }
-    }
-
-    void PalautaYlos()
-    {
-        if (painettuNappi != null)
-        {
-            painettuNappi.Y += 15;
-        }
-        painettuNappi = null;
     }
 }
