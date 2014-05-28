@@ -11,6 +11,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Threading;
 using System.Runtime.InteropServices;
+using System.Text;
 
 // Oppilas, PelinNimi, Repo, Lista checkoutattavista tiedostoista/kansioista, Solutiontiedosto
 class GameRecord 
@@ -38,21 +39,24 @@ public class TarkistaOppilaidenPelit : Game
 {
     static int HWND_TOP = 0;
     static int HWND_TOPMOST = -1;
+    static int MAX_TIMEOUT = 30000; // wait for 15 sec
+    static int SHOW_THIS_MANY_MESSAGES = 10; // Message window does not have scroll. Show only this many recent messages.
 
-    string SVN_CLI_EXE = @"C:\Users\opetus01\Downloads\svn-win32-1.8.8\svn-win32-1.8.8\bin\svn.exe";
+    string SVN_CLI_EXE = @"C:\Temp\svn-win32-1.8.8\bin\svn.exe";
     string MSBUILD_EXE = @"C:\Windows\Microsoft.NET\Framework\v4.0.30319\MsBuild.exe";
     //double TASK_COMPLETION_POLL_INTERVAL = 2.0;
     double PROCESS_CHECK_INTERVAL = 1.0;
     int MAX_GAME_RUN_TIME = 3000;
 
-    Queue<Tuple<GameRecord, Task>> taskQueue;
+    List<Tuple<GameRecord, Task>> taskQueue;
     List<GameRecord> listOfGames;
     Process activeCliProcess;
     bool processing = false;
     bool paused = false;
-    bool topmost = true;
+    bool topmost = false;
 
     Mutex stateQueueMutex = new Mutex();
+    Dictionary<string, List<string>> detailedMessages = new Dictionary<string, List<string>>();
     Queue<string> messageQueue = new Queue<string>();
     Queue<Tuple<GameRecord, Task, Status>> stateQueue = new Queue<Tuple<GameRecord, Task, Status>>();
 
@@ -78,25 +82,30 @@ public class TarkistaOppilaidenPelit : Game
 
     Dictionary<Task, string> taskToLabel = new Dictionary<Task, string>()
     {
-        {Task.Checkout, "Nouto"},
-        {Task.UpdateListed, "Update"},
-        {Task.Compile, "Kääntäminen"},
-        {Task.RunGame, "Pelin ajo"},
+        {Task.Checkout, "Alustus"},
+        {Task.UpdateListed, "Haku"},
+        {Task.Compile, "Kääntö"},
+        {Task.RunGame, "Pelaa"},
     };
    
     
 
     public override void Begin()
     {
-        //SetWindowSize(800, 600);
-        SetWindowTopmost(topmost);
+        SetWindowSize(1024, 768);
+        if (topmost)
+            SetWindowTopmost(topmost);
         
         IsMouseVisible = true;
 
         PhoneBackButton.Listen(ConfirmExit, "Lopeta peli");
-        Keyboard.Listen(Key.Escape, ButtonState.Pressed, ConfirmExit, "Lopeta peli");
-        Keyboard.Listen(Key.P, ButtonState.Pressed, PauseProcess, "Pistä tauolle");
-        Keyboard.Listen(Key.T, ButtonState.Pressed, ToggleTopmost, "Pistä tauolle");
+        Keyboard.Listen(Key.Escape, ButtonState.Pressed, ConfirmExit, "Lopeta ohjelma");
+        Keyboard.Listen(Key.P, ButtonState.Pressed, OnPauseProcess, "Pistä tauolle");
+        Keyboard.Listen(Key.T, ButtonState.Pressed, OnToggleTopmost, "Piilota pelit taustalle");
+        Keyboard.Listen(Key.H, ButtonState.Pressed, ShowControlHelp, "Näytä tämä ohje uudelleen");
+
+        Mouse.Listen(MouseButton.Left, ButtonState.Released, OnMouseClicked, "Klikkaa palloista lisätietoja");
+        ShowControlHelp();
 
         // TODO: There should be other ways to get this, a plain text file for example?
         //  but for now hard coded list will do.
@@ -107,55 +116,98 @@ public class TarkistaOppilaidenPelit : Game
         if (listOfGames.Count != authors.Count)
             throw new ArgumentException("Tekijöiden pitää olla yksilöllisiä");
 
+        double aspect = Screen.Width/Screen.Height;
+        int rows = (int)Math.Ceiling( Math.Sqrt(listOfGames.Count)/aspect );
+        int cols = (int)Math.Floor( Math.Sqrt(listOfGames.Count)*aspect );
+
         // Create indicators
-        taskQueue = new Queue<Tuple<GameRecord, Task>>();
+        taskQueue = new List<Tuple<GameRecord, Task>>();
         for (int i = 0; i < listOfGames.Count; i++)
         {
-            var record = listOfGames[i];
+            int row = i / cols + 1;
+            int col = i % cols + 1;
 
-            var indicator = new GameObject(40, 40, Shape.Circle);
+            var record = listOfGames[i];
+            detailedMessages.Add(record.Author, new List<string>());
+
+            var indicator = new GameObject(40*2, 40*2, Shape.Circle);
             indicator.Color = Color.Gray;
             indicator.Tag = record.Author + "_indicator";
-            indicator.X = Screen.Left+100 + ((Screen.Right-Screen.Left-100)/listOfGames.Count)*i;
+    
+            // +2 is for margins        
+            indicator.X = Screen.Left + ((Screen.Right - Screen.Left) / (cols+1)) * col;
+            indicator.Y = Screen.Top - ((Screen.Top - Screen.Bottom) / (rows+1)) * row;
             Add(indicator);
 
             var nameLabel = new Label(120, 40);
             //nameLabel.Font = Font.DefaultLargeBold;
             nameLabel.Text = record.Author;
-            nameLabel.Position = new Vector(indicator.X, 70);
+            nameLabel.Position = new Vector(indicator.X, indicator.Y + 60);
             Add(nameLabel);
 
             var statusLabel = new Label(120, 40);
             //nameLabel.Font = Font.DefaultLargeBold;
             statusLabel.Tag = record.Author + "_status";
             statusLabel.Text = "odota";
-            statusLabel.Position = new Vector(indicator.X, -70);
+            statusLabel.Position = new Vector(indicator.X, indicator.Y - 60);
             Add(statusLabel);
 
             // Always 1st try (or verify) that the files have been checked out
-            taskQueue.Enqueue( new Tuple<GameRecord, Task>(record, Task.Checkout) );
+            taskQueue.Add( new Tuple<GameRecord, Task>(record, Task.Checkout) );
         }
+
+        Exiting += KillTaskProcessorThread;
 
         ThreadedTaskListProcessor();
     }
 
     #region KeypressHandlers
-    void PauseProcess()
+    void OnPauseProcess()
     {
         paused = !paused;
     }
 
-    void ToggleTopmost()
+    void OnToggleTopmost()
     {
         topmost = !topmost;
         SetWindowTopmost(topmost);
+    }
+
+    void OnMouseClicked()
+    {
+        GameObject clickTgt = GetObjectAt(Mouse.PositionOnWorld);
+        if (clickTgt != null && clickTgt.Tag is string)
+        {
+            string stag = clickTgt.Tag as string;
+            if (stag.Contains("_indicator"))
+            {
+                string author = stag.Replace("_indicator", "");
+                if (stateQueueMutex.WaitOne(3000))
+                {
+                    StringBuilder allMsgs = new StringBuilder();
+                    // MessageWindow does not have vertical scroll, so limit to 20 or so last messages
+                    for (int i = Math.Max(0, detailedMessages[author].Count-SHOW_THIS_MANY_MESSAGES);
+                             i < detailedMessages[author].Count;
+                             i++)
+			        {
+                        allMsgs.Append(detailedMessages[author][i]+ "\n");
+	                }
+                    stateQueueMutex.ReleaseMutex();
+
+                    // Show error messages.
+                    MessageWindow ikkuna = new MessageWindow(allMsgs.ToString());
+                    Add(ikkuna);
+                }
+            }
+
+        }
     }
     #endregion
 
     void SetWindowTopmost(bool topmost)
     {
         int screenHt = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Height;
-        int screenWt = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Height;
+        int screenWt = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Width;
         if (topmost)
         {
             User32.SetWindowPos((uint)this.Window.Handle, HWND_TOPMOST, 0, 0, screenWt, screenHt, 0);
@@ -194,7 +246,7 @@ public class TarkistaOppilaidenPelit : Game
                 switch (stateChange.Item3)
                 {
                     case Status.Wait:
-                        indicator.Color = Color.Gray;        
+                        indicator.Color = Color.Yellow;        
                         break;
                     case Status.OK:
                         if (stateChange.Item2==Task.RunGame)
@@ -213,6 +265,8 @@ public class TarkistaOppilaidenPelit : Game
         }
     }
 
+    
+
     #region TaskProcessing
     private void ThreadedTaskListProcessor()
     {
@@ -226,6 +280,12 @@ public class TarkistaOppilaidenPelit : Game
         // alive:
         while (!processingThread.IsAlive) ;
     }
+    private void KillTaskProcessorThread()
+    {
+        if (processingThread!=null)
+            processingThread.Abort();
+    }
+
 
     void ProcessTaskList()
     {
@@ -240,30 +300,40 @@ public class TarkistaOppilaidenPelit : Game
             if (taskQueue.Count == 0)
                 break;
 
-            var task = taskQueue.Dequeue();
+            var task = taskQueue[0];
+            taskQueue.RemoveAt(0);
+            string msg;
             switch (task.Item2)
             {   
                 case Task.Checkout:
                     stateQueueMutex.WaitOne();
-                    messageQueue.Enqueue("Checking out for " + task.Item1.Author);
+                    msg = "Checking out for " + task.Item1.Author;
+                    messageQueue.Enqueue(msg);
+                    detailedMessages[task.Item1.Author].Add("\n" + msg + "\n");
                     stateQueueMutex.ReleaseMutex();
                     ProcessCheckoutRepo(task.Item1);
                     break;
                 case Task.UpdateListed:
                     stateQueueMutex.WaitOne();
-                    messageQueue.Enqueue("Updating files from " + task.Item1.Author);
+                    msg = "Updating files from " + task.Item1.Author;
+                    messageQueue.Enqueue(msg);
+                    detailedMessages[task.Item1.Author].Add("\n" + msg + "\n");
                     stateQueueMutex.ReleaseMutex();
                     ProcessUpdateListed(task.Item1);
                     break;
                 case Task.Compile:
                     stateQueueMutex.WaitOne();
-                    messageQueue.Enqueue("Compiling project of " + task.Item1.Author);
+                    msg = "Compiling project of " + task.Item1.Author;
+                    messageQueue.Enqueue(msg);
+                    detailedMessages[task.Item1.Author].Add("\n" + msg + "\n");
                     stateQueueMutex.ReleaseMutex();
                     ProcessCompile(task.Item1);
                     break;
                 case Task.RunGame:
                     stateQueueMutex.WaitOne();
-                    messageQueue.Enqueue("Running game of " + task.Item1.Author);
+                    msg = "Running game of " + task.Item1.Author;
+                    messageQueue.Enqueue(msg);
+                    detailedMessages[task.Item1.Author].Add("\n" + msg + "\n");
                     stateQueueMutex.ReleaseMutex();
                     ProcessRunGame(task.Item1);
                     break;
@@ -279,7 +349,7 @@ public class TarkistaOppilaidenPelit : Game
         // Directory existance implies existing checkout
         if (Directory.Exists(record.Author))
         {
-            taskQueue.Enqueue(new Tuple<GameRecord, Task>(record, Task.UpdateListed));
+            taskQueue.Add(new Tuple<GameRecord, Task>(record, Task.UpdateListed));
         }
         else
         {
@@ -313,7 +383,7 @@ public class TarkistaOppilaidenPelit : Game
                 addRetry = true;    
             }
             string command = String.Format("\"{0}\" up \"{1}\"", SVN_CLI_EXE, Path.Combine(Directory.GetCurrentDirectory(), record.Author, toUpdate));
-            if GenericProcessor(record, currentTask, nextTask, command, -1, addRetry);
+            GenericProcessor(record, currentTask, nextTask, command, -1, addRetry);
         }
     }
 
@@ -350,7 +420,9 @@ public class TarkistaOppilaidenPelit : Game
             else
             {
                 stateQueueMutex.WaitOne();
-                messageQueue.Enqueue("Multiple game exes for the game, using " + gameExeName);
+                string msg = "Multiple game exes for the game, using " + gameExeName;
+                messageQueue.Enqueue(msg);
+                detailedMessages[record.Author].Add(msg);
                 stateQueueMutex.ReleaseMutex();
                 break;
             }
@@ -358,7 +430,7 @@ public class TarkistaOppilaidenPelit : Game
         if (gameExeName == "")
         {
             // No game to run. Skip to update.
-            taskQueue.Enqueue(new Tuple<GameRecord, Task>(record, Task.UpdateListed));
+            taskQueue.Add(new Tuple<GameRecord, Task>(record, Task.UpdateListed));
         }
         else
         {
@@ -373,6 +445,7 @@ public class TarkistaOppilaidenPelit : Game
 
     private Status GenericProcessor(GameRecord record, Task currentTask, Task nextTask, string command, int runTimeout = -1, bool addRetry = true)
     {
+        string msg;
         Status returnStatus = Status.NA;
         if (activeCliProcess == null)
         {
@@ -409,7 +482,18 @@ public class TarkistaOppilaidenPelit : Game
             //messageQueueMutex.ReleaseMutex();
 
             if (runTimeout == -1)
-                activeCliProcess.WaitForExit();
+            {
+                if (!activeCliProcess.WaitForExit(MAX_TIMEOUT))
+                {
+                    activeCliProcess.Kill();
+                    stateQueueMutex.WaitOne();
+                    msg = "Process timeout: killed.";
+                    messageQueue.Enqueue(msg);
+                    detailedMessages[record.Author].Add(msg);
+                    stateQueueMutex.ReleaseMutex();
+                    Thread.Sleep(200);
+                }
+            }
             else
             {
                 activeCliProcess.WaitForExit(runTimeout);
@@ -422,7 +506,9 @@ public class TarkistaOppilaidenPelit : Game
             if (activeCliProcess.ExitCode == 0)
             {
                 stateQueueMutex.WaitOne();
-                messageQueue.Enqueue("Process exited with CODE 0. Output:");
+                msg = "Process exited with CODE 0.";
+                messageQueue.Enqueue(msg);
+                detailedMessages[record.Author].Add("\n"+msg);
 
                 StreamReader sr = activeCliProcess.StandardOutput;
                 while (!sr.EndOfStream)
@@ -431,7 +517,7 @@ public class TarkistaOppilaidenPelit : Game
                     if (s != "")
                     {
                         Trace.WriteLine(s);
-                        //messageQueue.Enqueue(s);
+                        detailedMessages[record.Author].Add(s);
                     }
                 }
 
@@ -443,12 +529,14 @@ public class TarkistaOppilaidenPelit : Game
 
                 // TODO: Check if it was successfull, //  update light bulb state and 
                 if (nextTask != Task.None)
-                    taskQueue.Enqueue(new Tuple<GameRecord, Task>(record, nextTask));
+                    taskQueue.Insert(0, new Tuple<GameRecord, Task>(record, nextTask));
             }
             else
             {
                 stateQueueMutex.WaitOne();
-                messageQueue.Enqueue("Process exited with CODE 1. Output:");
+                msg = "Process exited with CODE 1.";
+                messageQueue.Enqueue(msg);
+                detailedMessages[record.Author].Add("\n" + msg);
 
                 
                 StreamReader sro = activeCliProcess.StandardOutput;
@@ -458,7 +546,7 @@ public class TarkistaOppilaidenPelit : Game
                     if (s != "")
                     {
                         Trace.WriteLine(s);
-                        //messageQueue.Enqueue(s);
+                        detailedMessages[record.Author].Add(s);
                     }
                 }
                 StreamReader sre = activeCliProcess.StandardError;
@@ -468,7 +556,7 @@ public class TarkistaOppilaidenPelit : Game
                     if (s != "")
                     {
                         Trace.WriteLine(s);
-                        //messageQueue.Enqueue(s);
+                        detailedMessages[record.Author].Add(s);
                     }
                 }
 
@@ -478,21 +566,23 @@ public class TarkistaOppilaidenPelit : Game
                 stateQueueMutex.ReleaseMutex();
 
                 if (addRetry)
-                    taskQueue.Enqueue(new Tuple<GameRecord, Task>(record, currentTask));
+                    taskQueue.Add(new Tuple<GameRecord, Task>(record, currentTask));
             }
         }
         else
         {
             activeCliProcess.Kill();
             stateQueueMutex.WaitOne();
-            messageQueue.Enqueue("Process killed");
+            msg = "Process killed as scheduled.";
+            messageQueue.Enqueue(msg);
+            detailedMessages[record.Author].Add(msg);
             stateQueue.Enqueue(new Tuple<GameRecord, Task, Status>(record, currentTask, Status.OK));
             returnStatus = Status.OK;
             stateQueueMutex.ReleaseMutex();
 
             // TODO: Check if it was successfull, //  update light bulb state and 
             if (nextTask != Task.None)
-                taskQueue.Enqueue(new Tuple<GameRecord, Task>(record, nextTask));
+                taskQueue.Add(new Tuple<GameRecord, Task>(record, nextTask));
         }
         activeCliProcess = null;
 
@@ -521,7 +611,7 @@ public class TarkistaOppilaidenPelit : Game
         //  Ei välejä
         return new List<GameRecord>(){
             new GameRecord(){
-                Author="Alex&JoonaR",
+                Author="AlexJaJoonaR",
                 GameName="Zombie Swing",
                 SVNRepo="https://github.com/magishark/sejypeli.git/trunk",
                 ToFetch=new List<string>(){
@@ -597,7 +687,7 @@ public class TarkistaOppilaidenPelit : Game
 
 
             new GameRecord(){
-                Author="Saku&Joeli",
+                Author="SakuJaJoeli",
                 GameName="Flappy derp",
                 SVNRepo=@"https://github.com/EXIBEL/sejypeli.git/trunk",
                 ToFetch=new List<string>(){
