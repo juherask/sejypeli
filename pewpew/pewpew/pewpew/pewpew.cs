@@ -18,6 +18,9 @@ public class pewpew : PhysicsGame
     public override void Begin()
     {
         Level.Size = Screen.Size;
+
+        Level.Background.CreateStars();
+
         Surfaces borders = Level.CreateBorders();
         Camera.ZoomToLevel();
 
@@ -25,6 +28,7 @@ public class pewpew : PhysicsGame
         Weapon ase = new LaserGun(20, 20);
         ase.IsVisible = false;
         ase.Angle = Angle.FromDegrees(90);
+        // Opettajalle huom: Laserin osumisen käsittely on Tämän selittäminen ajan kanssa on tärkeää. Kerro tarkasti, mitä min parametri tarkoittaa ja miksi kutsuttava aliohjelmat saa ne parametrit mitkä saavat.
         ase.ProjectileCollision = LaserOsui;
         pelaaja.Add(ase);
         Add(pelaaja);
@@ -36,8 +40,8 @@ public class pewpew : PhysicsGame
         PhoneBackButton.Listen(ConfirmExit, "Lopeta peli");
         Keyboard.Listen(Key.Escape, ButtonState.Pressed, ConfirmExit, "Lopeta peli");
 
+        // Opettajalle huom: Näiden selittäminen ajan kanssa on tärkeää. Kerro tarkasti, mitä min parametri tarkoittaa ja miksi kutsuttava aliohjelmat saa ne parametrit mitkä saavat.
         Keyboard.Listen(Key.Space, ButtonState.Pressed, Ammu, "Ammu rakettia", ase);
-
         Keyboard.Listen(Key.Up, ButtonState.Down, KaytaRakettia, "Käytä rakettia", pelaaja);
         Keyboard.Listen(Key.Left, ButtonState.Down, Kaanny, "Käänny oikealle", pelaaja, 5.0);
         Keyboard.Listen(Key.Left, ButtonState.Released, Kaanny, "", pelaaja, 0.0);
@@ -50,6 +54,7 @@ public class pewpew : PhysicsGame
         PhysicsObject ammus = ase.Shoot();
     }
 
+    // Opettajalle: Osuman käsittely on 
     void LaserOsui(PhysicsObject ammus, PhysicsObject kohde)
     {
         ammus.Destroy();
