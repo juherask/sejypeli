@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual C# Express 2010
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MorotVsIhmiset", "IhmisetVsHirviot\IhmisetVsHirviot\MorotVsIhmiset.csproj", "{D1AF76E5-ABE4-4DFC-8840-CFA661207964}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MorotVsIhmiset", "IhmisetVsHirviot\MorotVsIhmiset.csproj", "{D1AF76E5-ABE4-4DFC-8840-CFA661207964}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MorotVsIhmisetContent", "IhmisetVsHirviot\IhmisetVsHirviotContent\MorotVsIhmisetContent.contentproj", "{7E0B0E5E-53A0-4CEA-BFFB-07F0C295F4DB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MorotVsIhmisetContent", "IhmisetVsHirviotContent\MorotVsIhmisetContent.contentproj", "{7E0B0E5E-53A0-4CEA-BFFB-07F0C295F4DB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

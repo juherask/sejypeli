@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual C# Express 2010
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flappy", "Flappy\Flappy\Flappy.csproj", "{7A7AC705-DD32-4C19-9E67-0FD32588A2E7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flappy", "Flappy\Flappy.csproj", "{7A7AC705-DD32-4C19-9E67-0FD32588A2E7}"
 EndProject
-Project("{96E2B04D-8817-42C6-938A-82C39BA4D311}") = "FlappyContent", "Flappy\FlappyContent\FlappyContent.contentproj", "{7D834DBF-09B0-49F6-A8AC-7238CED3F917}"
+Project("{96E2B04D-8817-42C6-938A-82C39BA4D311}") = "FlappyContent", "FlappyContent\FlappyContent.contentproj", "{7D834DBF-09B0-49F6-A8AC-7238CED3F917}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

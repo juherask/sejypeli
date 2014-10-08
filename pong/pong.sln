@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual C# Express 2010
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "pong", "pong\pong\pong.csproj", "{E28CF7D0-F089-4A45-AD06-2A473210F1F2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "pong", "pong\pong.csproj", "{E28CF7D0-F089-4A45-AD06-2A473210F1F2}"
 EndProject
-Project("{96E2B04D-8817-42C6-938A-82C39BA4D311}") = "pongContent", "pong\pongContent\pongContent.contentproj", "{F2B439E2-02E6-4B47-9264-CEDC84AFD676}"
+Project("{96E2B04D-8817-42C6-938A-82C39BA4D311}") = "pongContent", "pongContent\pongContent.contentproj", "{F2B439E2-02E6-4B47-9264-CEDC84AFD676}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

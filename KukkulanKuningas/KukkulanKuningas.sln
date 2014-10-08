@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual C# Express 2010
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KukkulanKuningas", "KukkulanKuningas\KukkulanKuningas\KukkulanKuningas.csproj", "{A721010B-1CF1-42E3-BA75-1D7D29EBE5D1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KukkulanKuningas", "KukkulanKuningas\KukkulanKuningas.csproj", "{A721010B-1CF1-42E3-BA75-1D7D29EBE5D1}"
 EndProject
-Project("{96E2B04D-8817-42C6-938A-82C39BA4D311}") = "KukkulanKuningasContent", "KukkulanKuningas\KukkulanKuningasContent\KukkulanKuningasContent.contentproj", "{8460A6AF-C6A6-4DF5-98E0-206AD02036E5}"
+Project("{96E2B04D-8817-42C6-938A-82C39BA4D311}") = "KukkulanKuningasContent", "KukkulanKuningasContent\KukkulanKuningasContent.contentproj", "{8460A6AF-C6A6-4DF5-98E0-206AD02036E5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

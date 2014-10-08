@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual C# Express 2010
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Koppi", "Koppi\Koppi\Koppi.csproj", "{922C80C8-9C39-4C66-8724-BB463993F02B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Koppi", "Koppi\Koppi.csproj", "{922C80C8-9C39-4C66-8724-BB463993F02B}"
 EndProject
-Project("{96E2B04D-8817-42C6-938A-82C39BA4D311}") = "KoppiContent", "Koppi\KoppiContent\KoppiContent.contentproj", "{A3F5E4E6-A7A2-4831-ACA3-04FF111A66D2}"
+Project("{96E2B04D-8817-42C6-938A-82C39BA4D311}") = "KoppiContent", "KoppiContent\KoppiContent.contentproj", "{A3F5E4E6-A7A2-4831-ACA3-04FF111A66D2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
