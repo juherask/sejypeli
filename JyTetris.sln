@@ -1,0 +1,24 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual C# Express 2010
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JyTetris", "JyTetris\JyTetris\JyTetris.csproj", "{CF3CD895-C285-44AB-AE34-89A40E58DB21}"
+EndProject
+Project("{96E2B04D-8817-42C6-938A-82C39BA4D311}") = "JyTetrisContent", "JyTetris\JyTetrisContent\JyTetrisContent.contentproj", "{942EB16F-68E7-4A94-BC1E-D9AB5284CE95}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x86 = Debug|x86
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CF3CD895-C285-44AB-AE34-89A40E58DB21}.Debug|x86.ActiveCfg = Debug|x86
+		{CF3CD895-C285-44AB-AE34-89A40E58DB21}.Debug|x86.Build.0 = Debug|x86
+		{CF3CD895-C285-44AB-AE34-89A40E58DB21}.Release|x86.ActiveCfg = Release|x86
+		{CF3CD895-C285-44AB-AE34-89A40E58DB21}.Release|x86.Build.0 = Release|x86
+		{942EB16F-68E7-4A94-BC1E-D9AB5284CE95}.Debug|x86.ActiveCfg = Debug|x86
+		{942EB16F-68E7-4A94-BC1E-D9AB5284CE95}.Release|x86.ActiveCfg = Release|x86
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
