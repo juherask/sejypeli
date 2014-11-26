@@ -16,7 +16,7 @@ using Jypeli.Widgets;
 public class JyTetris : Game
 {
     //** Vakiot **//
-    double PalikanKoko = 0.0;
+    double PalikanKoko;
 
     //** Pelitilanne **//
     int Taso = 1;
@@ -87,9 +87,9 @@ public class JyTetris : Game
         paivitysAjastin.Start();
     }
 
-    void LisaaAliNelio(GameObject palikka, int sivulle, int alas)
+    void LisaaAliNelio(GameObject palikka, double sivulle, double alas)
     {
-        var nelio = new GameObject(PalikanKoko, PalikanKoko);
+        var nelio = new GameObject(PalikanKoko-2, PalikanKoko-2);
         nelio.Color = palikka.Color;
         nelio.Position = new Vector(sivulle * PalikanKoko, alas * PalikanKoko);
         palikka.Add(nelio);
@@ -102,59 +102,68 @@ public class JyTetris : Game
         char satunnaisPalikkaTunniste = RandomGen.SelectOne('O'/*neliö*/, 'L', 'J', 'I', 'T', 'S', 'Z' );
 
         /// ... ja luo sitä vastaava palikka
-        var palikka = new GameObject(PalikanKoko, PalikanKoko);
-         
+        var palikka = new GameObject(0, 0);
+        palikka.Y = PalikanKoko * 7;
         switch (satunnaisPalikkaTunniste)
 	    {
             case 'O':
                 palikka.Color = Color.Yellow;
-                LisaaAliNelio(palikka, 1, 0);
-                LisaaAliNelio(palikka, 1, 1);
-                LisaaAliNelio(palikka, 0, 1);
+                LisaaAliNelio(palikka, 0.5, 0.5);
+                LisaaAliNelio(palikka, -0.5, 0.5);
+                LisaaAliNelio(palikka, 0.5, -0.5);
+                LisaaAliNelio(palikka, -0.5, -0.5);
+                // Nämä tarvitaan, jotta palikka osuu "jakoon"
+                palikka.X += PalikanKoko * 0.5;
+                palikka.Y += PalikanKoko * 0.5;
                 break;
             case 'L':
                 palikka.Color = Color.Orange;
+                LisaaAliNelio(palikka, 0, 0);
                 LisaaAliNelio(palikka, -1, 0);
-                LisaaAliNelio(palikka, -1, 1);
-                LisaaAliNelio(palikka, 0, 1);
+                LisaaAliNelio(palikka, 1, 0);
+                LisaaAliNelio(palikka, 1, 1);
                 break;
             case 'J':
                 palikka.Color = Color.Blue;
+                LisaaAliNelio(palikka, 0, 0);
+                LisaaAliNelio(palikka, -1, 0);
+                LisaaAliNelio(palikka, -1, 1);
                 LisaaAliNelio(palikka, 1, 0);
-                LisaaAliNelio(palikka, 1, 1);
-                LisaaAliNelio(palikka, 0, -1);
                 break;
             case 'I':
                 palikka.Color = Color.DarkCyan;
-                LisaaAliNelio(palikka, -1, 0);
-                LisaaAliNelio(palikka, 1, 0);
-                LisaaAliNelio(palikka, 2, 0);
+                LisaaAliNelio(palikka, -1.5, 0.5);
+                LisaaAliNelio(palikka, -0.5, 0.5);
+                LisaaAliNelio(palikka, 0.5, 0.5);
+                LisaaAliNelio(palikka, 1.5, 0.5);
+                palikka.X += PalikanKoko * 0.5;
+                palikka.Y += PalikanKoko * 0.5;
                 break;
             case 'T':
                 palikka.Color = Color.Purple;
+                LisaaAliNelio(palikka, 0, 0);
                 LisaaAliNelio(palikka, -1, 0);
-                LisaaAliNelio(palikka, 0, -1);
+                LisaaAliNelio(palikka, 0, 1);
                 LisaaAliNelio(palikka, 1, 0);
                 break;
             case 'S':
                 palikka.Color = Color.Green;
-                LisaaAliNelio(palikka, 1, 0);
-                LisaaAliNelio(palikka, 0, -1);
-                LisaaAliNelio(palikka, -1, -1);
+                LisaaAliNelio(palikka, 0, 0);
+                LisaaAliNelio(palikka, -1, 0);
+                LisaaAliNelio(palikka, 0, 1);
+                LisaaAliNelio(palikka, 1, 1);
                 break;
             case 'Z':
                 palikka.Color = Color.Red;
-                LisaaAliNelio(palikka, -1, 0);
-                LisaaAliNelio(palikka, 0, -1);
-                LisaaAliNelio(palikka, 1, -1);
+                LisaaAliNelio(palikka, 0, 0);
+                LisaaAliNelio(palikka, 1, 0);
+                LisaaAliNelio(palikka, 0, 1);
+                LisaaAliNelio(palikka, -1, 1);
                 break;
 		    default:
                 break;
 	    }
-        // Tämä on "haamuneliö", jota käytetään törmaysten tunnistukseen
-        LisaaAliNelio(palikka, 0, 0);
         palikka.Tag = satunnaisPalikkaTunniste;
-        palikka.Y = PalikanKoko * 7;
         Add(palikka);
         return palikka;
     }
@@ -164,9 +173,13 @@ public class JyTetris : Game
     {
         foreach (var lapsi in palikalle.Objects)
         {
-            GameObject tormaus = GetObjectAt(palikalle.Position+lapsi.Position);
-            if (tormaus != null && tormaus!=palikalle && !palikalle.Objects.Contains(tormaus))
-                return true;
+            foreach (GameObject tormays in GetObjectsAt(lapsi.AbsolutePosition))
+            {
+                if (!(tormays is MessageDisplay) &&
+                    tormays != palikalle &&
+                    !palikalle.Objects.Contains(tormays))
+                    return true;
+            }
         }
         return false;
     }
