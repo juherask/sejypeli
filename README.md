@@ -1,6 +1,4 @@
 ﻿sejypeli
 ========
 
-Seinäjoen kansalaisopiston pelikurssin säiliö, paras peli ikiniä!!!11ONEONE
-ONE
-TWO?
+Seinäjoen kansalaisopiston pelikurssin aikana syksyllä 2013 ja keväällä 2014 tehtyjä esimerkkipelejä.
