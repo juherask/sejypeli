@@ -1,89 +1,119 @@
 ﻿using System;
-using System.Collections.Generic;
 using Jypeli;
-using Jypeli.Assets;
 using Jypeli.Controls;
-using Jypeli.Effects;
 using Jypeli.Widgets;
 
 /* TODO:
- * törmäykset ja kiertojen salliminen tulisi tarkistaa vasta seuraavan updaten jälkeen? (tai update paussille siksi aikaa kun tsekkaus tehdään)
- * tulevan uuden palikan näyttö
- * pistelasku ja tasoissa eteneminen
- * katoavat rivit ja putoavat jämäpäalat
- * L ja J palikoissa jotain mätää
+ * pelattavuuden hierontaa: Näppäimen painaminen pohjaan rekisteröidään heti, mutta toistoja tehdään harvemmalla sykkeellä (timer?). Poistetaan timer kun näppäin nostetaan ylös.
  */
 public class JyTetris : Game
 {
     //** Vakiot **//
-    double PalikanKoko;
+
+    int ALKUPAIKKA = 7;
+    // Käytämme perustetris-asettelua 10x20
+    int KUILUN_LEVEYS = 10;
+    int KUILUN_KORKEUS = 20;
+    double PalikanKoko; // säätyy ruudun mukaan
 
     //** Pelitilanne **//
-    int Taso = 1;
+    
     Timer paivitysAjastin;
     GameObject pelattavaPalikka;
-    GameObject palikkaPino;
+    GameObject seuraavaPalikka;
+    int rivejaPoistettu = 0;
 
-    //** Aliohjelmat **//
+    //** Näytöt **//
+
+    IntMeter pisteLaskuri = new IntMeter(0);
+    IntMeter tasoLaskuri = new IntMeter(1);
+
+    //** Pelin koodi **//
 
     public override void Begin()
     {
-        // Palikan koko määräytyy kuvaruudun koon mukaan. Käytämme perustetris
+        // Palikan koko määräytyy kuvaruudun koon mukaan. Käytämme perustetris-
         //  asettelua 10x20 + 2 ylärivin piiloriviä + 1 marginaalia joka suuntaan.
-        PalikanKoko = Screen.Height / (20+2+1+1);
+        PalikanKoko = Screen.Height / (KUILUN_KORKEUS + 2 + 1 + 1);
 
-        AsetaTaso(Taso);
-        TeeReunat();
+        LisaaNaytot();
+        AsetaTaso(0, 1);
+        LisaaReunat();
+        
 
+        seuraavaPalikka = UusiPalikka();
         pelattavaPalikka = UusiPalikka();
+        // Tuo pelattava seuraavan palikan paikalta keskelle
+        pelattavaPalikka.X -= PalikanKoko*(KUILUN_LEVEYS / 2 + 5);
 
         // Säädä ruudun päivitysnopeutta, jotta näppäimenpainannuksia ei tule liikaa
-        this.TargetElapsedTime = TimeSpan.FromSeconds(1f / 20);
+        this.TargetElapsedTime = TimeSpan.FromSeconds(1f / 30);
         Keyboard.Listen(Key.Escape, ButtonState.Pressed, ConfirmExit, "Lopeta peli");
-        Keyboard.Listen(Key.Left, ButtonState.Down, SirraPalikkaa, "Siirrä palikkaa vasemmalle", -1, 0);
-        Keyboard.Listen(Key.Right, ButtonState.Down, SirraPalikkaa, "Siirrä palikkaa oikealle", 1, 0);
+        Keyboard.Listen(Key.Left, ButtonState.Pressed, SirraPalikkaa, "Siirrä palikkaa vasemmalle", -1, 0);
+        Keyboard.Listen(Key.Right, ButtonState.Pressed, SirraPalikkaa, "Siirrä palikkaa oikealle", 1, 0);
         Keyboard.Listen(Key.Down, ButtonState.Down, SirraPalikkaa, "Pudota palikkaa", 0, 1);
-        Keyboard.Listen(Key.Up, ButtonState.Down, PyoraytaPalikkaa, "Pyöräytä palikkaa");
+        Keyboard.Listen(Key.Up, ButtonState.Pressed, PyoraytaPalikkaa, "Pyöräytä palikkaa");
     }
 
-    void TeeReunat()
+    void LisaaNaytot()
     {
-        var oikeaReuna = new GameObject(PalikanKoko, PalikanKoko * 20);
+        Label pisteNaytto = new Label();
+        pisteNaytto.X = PalikanKoko * (KUILUN_LEVEYS / 2 + 5);
+        pisteNaytto.Y = PalikanKoko * (ALKUPAIKKA-4);
+        pisteNaytto.TextColor = Color.White;
+        pisteNaytto.Title = "PISTEET";
+        pisteNaytto.BindTo(pisteLaskuri);
+        Add(pisteNaytto);
+
+        Label tasoNaytto = new Label();
+        tasoNaytto.X = PalikanKoko * (KUILUN_LEVEYS / 2 + 5);
+        tasoNaytto.Y = PalikanKoko * (ALKUPAIKKA-3);
+        tasoNaytto.TextColor = Color.White;
+        tasoNaytto.Title = "TASO";
+        tasoNaytto.BindTo(tasoLaskuri);
+        Add(tasoNaytto);
+
+        // Kutsutaan tason nopeuden asettavaa aliohjelmaa aina kun laskurin arvo muuttuu.
+        tasoLaskuri.Changed += AsetaTaso;
+    }
+
+    void LisaaReunat()
+    {
+        var oikeaReuna = new GameObject(PalikanKoko, PalikanKoko * KUILUN_KORKEUS);
         oikeaReuna.Color = Color.DarkGray;
-        oikeaReuna.X = PalikanKoko * -(10/2+1);
+        oikeaReuna.X = PalikanKoko * -(KUILUN_LEVEYS / 2 + 1);
         oikeaReuna.Y = PalikanKoko * -0.5;
-        oikeaReuna.Tag = ' ';
+        oikeaReuna.Tag = "reuna";
         Add(oikeaReuna);
 
-        var vasenReuna = new GameObject(PalikanKoko, PalikanKoko * 20);
+        var vasenReuna = new GameObject(PalikanKoko, PalikanKoko * KUILUN_KORKEUS);
         vasenReuna.Color = Color.DarkGray;
-        vasenReuna.X = PalikanKoko * (10/2+0);
+        vasenReuna.X = PalikanKoko * (KUILUN_LEVEYS / 2 + 0);
         vasenReuna.Y = PalikanKoko * -0.5;
-        vasenReuna.Tag = ' ';
+        vasenReuna.Tag = "reuna";
         Add(vasenReuna);
 
-        var pohja = new GameObject(PalikanKoko * 12, PalikanKoko);
+        var pohja = new GameObject(PalikanKoko * (KUILUN_LEVEYS+2), PalikanKoko);
         pohja.Color = Color.DarkGray;
         pohja.X = PalikanKoko * -0.5;
-        pohja.Y = PalikanKoko * -11;
-        pohja.Tag = ' ';
+        pohja.Y = PalikanKoko * -(KUILUN_LEVEYS+1);
+        pohja.Tag = "reuna";
         Add(pohja);
-
-        // Kerätään pudonneet palikat pohjalle
-        palikkaPino = pohja;
     }
 
-    void AsetaTaso(int taso)
+    void AsetaTaso(int edellinenTaso, int nykyinenTaso)
     {
         if (paivitysAjastin!=null)
         {
             paivitysAjastin.Stop();
         }
-            
+           
+        // Ajastin tikittää kuin kello ja aina tasaisin väliajoin vie peliä
+        //  eteenpäin kutsumalla PaivitaPelitilanne-aliohjelmaa.
         paivitysAjastin = new Timer();
         paivitysAjastin.Timeout += PaivitaPelitilanne;
         paivitysAjastin.TimesLimited = false;
-        paivitysAjastin.Interval = 1.0 / taso;
+        paivitysAjastin.Interval = 1.0 / nykyinenTaso;
         paivitysAjastin.Start();
     }
 
@@ -94,8 +124,10 @@ public class JyTetris : Game
         nelio.Position = new Vector(sivulle * PalikanKoko, alas * PalikanKoko);
         palikka.Add(nelio);
     }
+
     // Kaikki palikat tehdään tässä. Palikka koostuu nurkkaneliöstä (GameObject) ja 
     //  sen lapsiobjekteiksi tehdyistä lisäneliöistä.
+    //  -> http://i.stack.imgur.com/JLRFu.png
     GameObject UusiPalikka()
     {
         // Valitse satunnainen palikkatunniste ... (käytetään standardinmukaisia termiinien nimiä)
@@ -103,7 +135,8 @@ public class JyTetris : Game
 
         /// ... ja luo sitä vastaava palikka
         var palikka = new GameObject(0, 0);
-        palikka.Y = PalikanKoko * 7;
+        palikka.X = PalikanKoko * (KUILUN_LEVEYS / 2 + 5);
+        palikka.Y = PalikanKoko * ALKUPAIKKA;
         switch (satunnaisPalikkaTunniste)
 	    {
             case 'O':
@@ -168,14 +201,14 @@ public class JyTetris : Game
         return palikka;
     }
 
-
+    // Törmääkö palikka toiseen palikkaan (Tägi on merkki, eli char) tai reunaan (Tägi on "reuna")
     bool TarkistaTormays(GameObject palikalle)
     {
-        foreach (var lapsi in palikalle.Objects)
+        foreach (var nelio in palikalle.Objects)
         {
-            foreach (GameObject tormays in GetObjectsAt(lapsi.AbsolutePosition))
+            foreach (GameObject tormays in GetObjectsAt(nelio.AbsolutePosition))
             {
-                if (!(tormays is MessageDisplay) &&
+                if ((tormays.Tag is char || tormays.Tag=="reuna") &&
                     tormays != palikalle &&
                     !palikalle.Objects.Contains(tormays))
                     return true;
@@ -189,16 +222,96 @@ public class JyTetris : Game
     {
         var painovoima = new Vector(0, -PalikanKoko);
         pelattavaPalikka.Position += painovoima;
+
+        // Törmäsikö palikka alaspäin siirryttyään maahan?
         if (TarkistaTormays(pelattavaPalikka))
         {
             pelattavaPalikka.Position -= painovoima;
-            pelattavaPalikka = UusiPalikka();
+            pelattavaPalikka = seuraavaPalikka;
+            pelattavaPalikka.X -= PalikanKoko * (KUILUN_LEVEYS / 2 + 5);
+            seuraavaPalikka = UusiPalikka();
+
+            int rivejaPoistettiinLkm = EtsiJaPoistaTaydetRivit();
+            int pisteitaLisaa = LaskePisteet(tasoLaskuri.Value, rivejaPoistettiinLkm);
+            pisteLaskuri.AddValue(pisteitaLisaa);
+
+            rivejaPoistettu += rivejaPoistettiinLkm;
+            if (rivejaPoistettu / 10 + 1 != tasoLaskuri.Value)
+            {
+                tasoLaskuri.SetValue(rivejaPoistettu / 10 + 1);
+            }
         }
     }
 
-    void SirraPalikkaa(int sivuttain, int ylosalas)
+    // Tarkistetaan täydet rivit
+    int EtsiJaPoistaTaydetRivit()
     {
-        var siirto = new Vector(PalikanKoko * sivuttain, -PalikanKoko * ylosalas);
+        int taydetRivitLkm = 0;
+
+        // Käy läpi kaikki rivit alkupaikasta ruudun alalaitaan
+        for (double y = PalikanKoko * ALKUPAIKKA; y > -Screen.Height / 2; y-=PalikanKoko )
+        {
+            int palikoitaRivilla = 0;
+            // Peliobjekti tunnistetaan palikaksi siitä, että täginä on yksikirjaiminen palikan koodi 'O', 'L' jne.
+            foreach (GameObject palikka in GetObjects(ob => ob.Tag is char))
+            {
+                foreach (var nelio in palikka.Objects)
+                {
+                    // Liukuluvut (double/float) eivät koskaan ole ihan samat, siksi tutkitaan
+                    //  ovatko ne "likipitäen", eli PalikanKoko/2 päässä, samat.
+                    if (Math.Abs(nelio.AbsolutePosition.Y - y) < PalikanKoko / 2)
+                    {
+                        palikoitaRivilla+=1;
+                    }
+                }
+            }
+            // Löysimme täyden rivin... 
+            if (palikoitaRivilla == KUILUN_LEVEYS)
+            {
+                taydetRivitLkm += 1;
+
+                // ... joten tehdään tarvittavat toimenpiteet ...
+                foreach (GameObject palikka in GetObjects(ob => ob.Tag is char))
+                {
+                    if (palikka == pelattavaPalikka || palikka==seuraavaPalikka)
+                    {
+                        continue;
+                    }
+                    foreach (var nelio in palikka.Objects)
+                    {
+                        // ... kuten poistetaan neliöt täydeltä riviltä ... 
+                        if (Math.Abs(nelio.AbsolutePosition.Y - y) < PalikanKoko / 2)
+                        {
+                            nelio.Destroy();
+                        }
+
+                        // ... ja pudotetaan kaikkia yläpuolella olevia alaspäin.
+                        else if (nelio.AbsolutePosition.Y > y + PalikanKoko / 2)
+                        {
+                            // Isäntäpalikka voi olla pyörähtänyt, joten siirretään sen näkökulmasta "alaspäin"
+                            nelio.Position += Vector.FromLengthAndAngle(PalikanKoko, -palikka.Angle-Angle.RightAngle);
+                        }
+                    }
+                    // Jos kaikki palikan neliöt on poistettu koko palikka voidaan tuhota.
+                    if (palikka.Objects.Count == 0)
+                    {
+                        palikka.Destroy();
+                    }
+                }
+            }
+        }
+
+        return taydetRivitLkm;
+    }
+
+    int LaskePisteet(int taso, int riveja)
+    {
+        return 100 * (riveja*2) * taso;
+    }
+
+    void SirraPalikkaa(int askeleitaSivuttain, int askeleitaYlosalas)
+    {
+        var siirto = new Vector(PalikanKoko * askeleitaSivuttain, -PalikanKoko * askeleitaYlosalas);
         pelattavaPalikka.Position += siirto;
         if (TarkistaTormays(pelattavaPalikka))
         {
